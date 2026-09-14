@@ -48,24 +48,38 @@ jobs:
             url="$(grep -v '^[[:space:]]*#' .github/force-post-url.txt | grep -m1 -oE 'https?://[^[:space:]]+' || true)"
           fi
           if [ -z "$url" ]; then
+            # A push that touched the file without leaving a URL in it is how
+            # the file looks between force posts, and every commented-out line
+            # is a deliberate "nothing to post". Failing that run would paint
+            # main red for doing exactly what was asked.
+            if [ "${{ github.event_name }}" = "push" ]; then
+              echo "No URL in .github/force-post-url.txt – nothing to post."
+              echo "proceed=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
             echo "Nothing to post: pass force_url, or put a URL in .github/force-post-url.txt." >&2
             exit 1
           fi
           echo "Posting $url"
           echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "proceed=true" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@v4
+        if: steps.target.outputs.proceed == 'true'
         with:
           node-version: 22
           cache: npm
 
       - run: npm ci
+        if: steps.target.outputs.proceed == 'true'
 
       - run: npm run build
+        if: steps.target.outputs.proceed == 'true'
 
       # Names a missing secret before anything reaches a vendor. DRY_RUN is set
       # so the database stays optional here, as it is for the post itself.
       - name: Check the secrets are there
+        if: steps.target.outputs.proceed == 'true'
         run: node dist/setup/check-env.js
         env:
           DRY_RUN: "true"
@@ -81,12 +95,14 @@ jobs:
       # Before the pipeline, because it opens a GitHub issue on the way to
       # Discord and an undeliverable alert should not leave one behind.
       - name: Check the Discord bot can see the channel
+        if: steps.target.outputs.proceed == 'true'
         run: node dist/index.js --check-discord
         env:
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           DISCORD_CHANNEL_ID: ${{ vars.DISCORD_CHANNEL_ID || secrets.DISCORD_CHANNEL_ID }}
 
       - name: Post it
+        if: steps.target.outputs.proceed == 'true'
         run: node dist/index.js --url "${{ steps.target.outputs.url }}"
         env:
           # Unset here means an in-memory store: the post still goes out, it

@@ -160,6 +160,25 @@ describe("workflow environments", () => {
   });
 });
 
+describe("force-post", () => {
+  const forcePost = workflows.find((workflow) => workflow.name === "force-post.yml")?.text ?? "";
+
+  it("does nothing, rather than failing, when the file holds no URL", () => {
+    // Between force posts the file is all comments, and every push that
+    // touches it triggers this workflow. A red run for doing what was asked
+    // teaches everyone to ignore the badge.
+    expect(forcePost).toContain('echo "proceed=false" >> "$GITHUB_OUTPUT"');
+    expect(forcePost).toContain("exit 0");
+  });
+
+  it("guards every step after the URL is picked", () => {
+    const steps = forcePost.split("\n").filter((line) => /^ {6}- (name|uses|run):/.test(line));
+    const guards = forcePost.match(/if: steps\.target\.outputs\.proceed == 'true'/g) ?? [];
+    // Every step but the checkout and the URL pick itself.
+    expect(guards).toHaveLength(steps.length - 2);
+  });
+});
+
 describe("the daily schedule", () => {
   const daily = workflows.find((workflow) => workflow.name === "daily.yml")?.text ?? "";
 
