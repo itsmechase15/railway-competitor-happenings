@@ -49,8 +49,10 @@ psql "$DATABASE_URL" -f migrations/001_init.sql
 
 2. Add the secrets under **Settings → Secrets and variables → Actions**. Values
    never go in the repo.
-3. Run **Actions → Check secrets** with strict on. It names what is missing and
-   where each value comes from.
+3. Run **Actions → Check secrets** with strict on. It lists every variable,
+   names what is missing, and says where each value comes from. Only the
+   required four fail it: `X_BEARER_TOKEN` is optional and its absence just
+   skips the X source.
 4. Run **Actions → Daily competitor happenings** by hand once. The first run
    seeds the backlog quietly; the next morning's run is the first that posts.
 
@@ -76,7 +78,7 @@ warns when it is not.
 ```bash
 npm install
 cp .env.example .env          # fill in what you have; git ignores .env
-npm run check-env -- --strict # says what is still missing
+npm run check-env -- --strict # every variable, and whether it is set
 npm run typecheck && npm test
 
 # The whole pipeline against live feeds, printing payloads instead of posting

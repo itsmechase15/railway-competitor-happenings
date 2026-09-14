@@ -26,13 +26,13 @@ describe("the environment preflight", () => {
     const report = checkEnv(ready);
     expect(report.missingRequired).toEqual([]);
     expect(report.missingSources).toEqual([]);
-    expect(isFailing(report, true)).toBe(false);
+    expect(isFailing(report)).toBe(false);
   });
 
   it("fails loud when DATABASE_URL is unset, which is where this repo is today", () => {
     const report = checkEnv({ ...ready, DATABASE_URL: undefined });
     expect(report.missingRequired.map((requirement) => requirement.name)).toEqual(["DATABASE_URL"]);
-    expect(isFailing(report, false)).toBe(true);
+    expect(isFailing(report)).toBe(true);
     // And it says where the value comes from, not just that it is missing.
     expect(formatReport(report, false)).toContain("Session pooler");
   });
@@ -54,14 +54,46 @@ describe("the environment preflight", () => {
     expect(formatReport(report, false)).toContain("restating the source");
   });
 
-  it("treats X as a source: skipped, not fatal, unless --strict", () => {
+  /**
+   * The plan has X optional from phase 1 on. A repo that never gets a bearer
+   * token still posts both changelogs and both blogs every morning, so a red
+   * preflight over it would be telling an operator to fix a working repo.
+   */
+  it("never fails over a missing X token, --strict included", () => {
     const report = checkEnv({ ...ready, X_BEARER_TOKEN: undefined });
     expect(report.missingRequired).toEqual([]);
     expect(report.missingSources.map((requirement) => requirement.name)).toEqual([
       "X_BEARER_TOKEN",
     ]);
-    expect(isFailing(report, false)).toBe(false);
-    expect(isFailing(report, true)).toBe(true);
+    expect(isFailing(report)).toBe(false);
+    // And it still says what that costs, in both modes.
+    expect(formatReport(report, false)).toContain("the X source is skipped");
+    expect(formatReport(report, true)).toContain("the X source is skipped");
+  });
+
+  it("requires exactly the four the plan calls phase 1", () => {
+    const required = REQUIREMENTS.filter((requirement) => requirement.need === "required").map(
+      (requirement) => requirement.name,
+    );
+    expect(required.sort()).toEqual([
+      "CURSOR_API_KEY",
+      "DATABASE_URL",
+      "DISCORD_BOT_TOKEN",
+      "DISCORD_CHANNEL_ID",
+    ]);
+    expect(required).not.toContain("X_BEARER_TOKEN");
+  });
+
+  it("lists every variable under --strict, so an unset optional is visible", () => {
+    const text = formatReport(checkEnv({ DATABASE_URL: ready.DATABASE_URL }), true);
+    for (const requirement of REQUIREMENTS) expect(text).toContain(requirement.name);
+    expect(text).toContain("Every variable this app reads");
+  });
+
+  it("takes GH_TOKEN for GITHUB_TOKEN, which is what a laptop has", () => {
+    const report = checkEnv({ ...ready, GITHUB_TOKEN: undefined, GH_TOKEN: "gh" });
+    expect(report.present).toContain("GITHUB_TOKEN");
+    expect(report.warnings.join(" ")).not.toContain("issue creation is skipped");
   });
 
   it("excuses the database and the channel id on a dry run, which posts nothing", () => {

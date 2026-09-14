@@ -13,7 +13,10 @@
 export type Need =
   /** The daily run cannot do its job without it. */
   | "required"
-  /** One source goes dark. The run still posts everything else. */
+  /**
+   * One source goes dark. The run still posts everything else, so this never
+   * fails a check – not under `--strict` either.
+   */
   | "source"
   /** Tuning, or a default that is already right. */
   | "optional";
@@ -37,6 +40,8 @@ export interface Requirement {
   howToGet: string;
   /** What happens on a run without it. Only for the ones a run survives. */
   without?: string;
+  /** Other names the same value may arrive under. */
+  alsoAccepts?: string[];
 }
 
 export const REQUIREMENTS: Requirement[] = [
@@ -74,6 +79,9 @@ export const REQUIREMENTS: Requirement[] = [
     howToGet: "cursor.com/dashboard → Integrations → API Keys → Create key",
     without: "the run falls back to restating the source, labeled 'not model-analyzed'",
   },
+  // The plan has X optional from phase 1 on: the run ships changelogs and
+  // blogs with or without a bearer token. A repo that never gets one is a
+  // working repo, so an unset token is reported and never fails a check.
   {
     name: "X_BEARER_TOKEN",
     need: "source",
@@ -90,6 +98,7 @@ export const REQUIREMENTS: Requirement[] = [
     howToGet:
       "Actions provides it; the workflows grant it issues: write. Locally, a PAT with repo scope, as GITHUB_TOKEN or GH_TOKEN",
     without: "issue creation is skipped and the alert posts without issue links",
+    alsoAccepts: ["GH_TOKEN"],
   },
   {
     name: "SCREENSHOT_URL_TEMPLATE",
@@ -125,6 +134,10 @@ function has(env: Env, name: string): boolean {
   return value !== undefined && value.trim() !== "";
 }
 
+function isSet(env: Env, requirement: Requirement): boolean {
+  return [requirement.name, ...(requirement.alsoAccepts ?? [])].some((name) => has(env, name));
+}
+
 /**
  * Supabase's direct host resolves to IPv6 only and GitHub's runners have no
  * IPv6 route, so a direct URI works on a laptop and fails on every scheduled
@@ -148,7 +161,7 @@ export function checkEnv(env: Env): EnvReport {
   const warnings: string[] = [];
 
   for (const requirement of REQUIREMENTS) {
-    if (has(env, requirement.name)) {
+    if (isSet(env, requirement)) {
       present.push(requirement.name);
       continue;
     }
@@ -207,6 +220,32 @@ function describe(requirement: Requirement): string {
   return lines.join("\n");
 }
 
+const NEED_WIDTH = Math.max(...REQUIREMENTS.map((requirement) => requirement.need.length));
+const NAME_WIDTH = Math.max(...REQUIREMENTS.map((requirement) => requirement.name.length));
+
+/**
+ * Every variable and whether it is set, which is what `--strict` is for. The
+ * terse `Set:` line answers "can this run"; a fresh clone is asking the wider
+ * question of what is still on the table, and an optional variable nobody has
+ * heard of is one nobody sets.
+ */
+function inventory(report: EnvReport): string {
+  const present = new Set(report.present);
+
+  const lines = REQUIREMENTS.map((requirement) => {
+    const set = present.has(requirement.name);
+    const columns = [
+      set ? "set  " : "unset",
+      requirement.name.padEnd(NAME_WIDTH),
+      requirement.need.padEnd(NEED_WIDTH),
+      set ? requirement.purpose : (requirement.without ?? requirement.purpose),
+    ];
+    return `  ${columns.join("  ")}`;
+  });
+
+  return `Every variable this app reads:\n${lines.join("\n")}`;
+}
+
 /**
  * The report as a person reads it. Names every missing variable and where the
  * value comes from, because "DATABASE_URL is not set" without the next two
@@ -224,17 +263,22 @@ export function formatReport(report: EnvReport, strict: boolean): string {
   }
 
   if (report.missingSources.length > 0) {
-    const headline = strict
-      ? `Missing ${report.missingSources.length} source secret(s), and --strict treats that as a failure:`
-      : `Missing ${report.missingSources.length} source secret(s) – these sources will be skipped:`;
-    sections.push(`${headline}\n${report.missingSources.map(describe).join("\n")}`);
+    sections.push(
+      `Missing ${report.missingSources.length} source secret(s) – optional, so these sources are skipped and the rest of the run is unaffected:\n${report.missingSources
+        .map(describe)
+        .join("\n")}`,
+    );
   }
 
   if (report.warnings.length > 0) {
     sections.push(`Worth knowing:\n${report.warnings.map((line) => `  - ${line}`).join("\n")}`);
   }
 
-  sections.push(`Set: ${report.present.length > 0 ? report.present.join(", ") : "nothing"}`);
+  sections.push(
+    strict
+      ? inventory(report)
+      : `Set: ${report.present.length > 0 ? report.present.join(", ") : "nothing"}`,
+  );
 
   if (report.missingRequired.length === 0 && report.missingSources.length === 0) {
     sections.push("Everything this app reads is configured.");
@@ -247,8 +291,12 @@ export function formatReport(report: EnvReport, strict: boolean): string {
   return sections.join("\n\n");
 }
 
-/** Whether the report should stop a run. Sources only count under `--strict`. */
-export function isFailing(report: EnvReport, strict: boolean): boolean {
-  if (report.missingRequired.length > 0) return true;
-  return strict && report.missingSources.length > 0;
+/**
+ * Whether the report should stop a run. Only the required variables do. A
+ * missing source costs that one source and nothing else, so `--strict` reports
+ * it and moves on: a repo with no X token is a repo that posts changelogs and
+ * blogs every morning, and failing its preflight would be a lie.
+ */
+export function isFailing(report: EnvReport): boolean {
+  return report.missingRequired.length > 0;
 }
