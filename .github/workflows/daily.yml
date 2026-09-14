@@ -1,0 +1,90 @@
+name: Daily competitor happenings
+
+on:
+  schedule:
+    # 14:00 UTC is 07:00 PT during daylight saving time, which is what the plan
+    # asks for. The second entry covers the winter, and the guard below drops
+    # whichever of the two lands before 07:00 in Los Angeles today.
+    - cron: "0 14 * * *" # 07:00 PDT
+    - cron: "0 15 * * *" # 07:00 PST
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print the Discord payloads instead of posting them"
+        type: boolean
+        default: false
+
+concurrency:
+  group: competitor-happenings
+  cancel-in-progress: false
+
+# Each alert links a GitHub issue holding the detail the embed no longer carries.
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check it is not before 07:00 in America/Los_Angeles
+        id: window
+        run: |
+          hour="$(TZ=America/Los_Angeles date +%H)"
+          # Only a too-early run bails. GitHub delays scheduled workflows under
+          # load – an exact 07 match turns any late start into a silently
+          # skipped day – and dedupe makes a second entry a no-op if both land.
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$hour" -lt 7 ]; then
+            echo "Local hour is $hour – too early, the later cron entry covers today."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.window.outputs.proceed == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.window.outputs.proceed == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+        if: steps.window.outputs.proceed == 'true'
+
+      - run: npm run build
+        if: steps.window.outputs.proceed == 'true'
+
+      # Fails in seconds, naming the secret and where its value comes from,
+      # rather than twenty minutes in as a Postgres timeout or a silent channel.
+      - name: Check the secrets are there
+        if: steps.window.outputs.proceed == 'true'
+        run: node dist/setup/check-env.js
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          # The preflight judges the channel id too, so it has to be able to
+          # see it. Reading it only in the step below would let a missing
+          # channel through the check that exists to catch exactly that.
+          DISCORD_CHANNEL_ID: ${{ vars.DISCORD_CHANNEL_ID || secrets.DISCORD_CHANNEL_ID }}
+          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+
+      - name: Run one cycle
+        if: steps.window.outputs.proceed == 'true'
+        run: node dist/index.js
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          # Provided by Actions; opens the issue each embed links to.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          # A channel id is not really a secret, but it is easy to store as one,
+          # and reading only `vars` there leaves it silently empty.
+          DISCORD_CHANNEL_ID: ${{ vars.DISCORD_CHANNEL_ID || secrets.DISCORD_CHANNEL_ID }}
+          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}

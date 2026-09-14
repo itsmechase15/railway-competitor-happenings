@@ -1,0 +1,9 @@
+# Put one announcement URL below and merge it to main to post that item to
+# Discord, ignoring the dedupe table and the first-run seed guard. The URL has
+# to still be in a live feed: this mode finds a real item, it cannot invent one.
+#
+# Everything commented out means the workflow does nothing on push, which is
+# what you want between force posts. The Actions tab can pass a URL directly
+# instead, as `force_url`.
+#
+# https://render.com/changelog/some-entry
