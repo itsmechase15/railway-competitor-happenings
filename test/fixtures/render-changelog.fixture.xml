@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+    <id>https://render.com</id>
+    <title>Render</title>
+    <updated>2026-09-14T20:56:04.171Z</updated>
+    <generator>https://github.com/jpmonette/feed</generator>
+    <link rel="alternate" href="https://render.com/changelog"/>
+    <link rel="self" href="https://render.com/changelog/feed.xml"/>
+    <subtitle>Changelog for Render</subtitle>
+    <icon>https://cdn.sanity.io/images/hvk0tap5/production/0ea63c1b6854bd803489557afb4ea54b85239418-128x128.png?fit=max&amp;auto=format</icon>
+    <rights>All rights reserved 2026, Render</rights>
+    <entry>
+        <title type="html"><![CDATA[See your service's deploys on a new page]]></title>
+        <id>https://render.com/changelog/see-your-service-s-deploys-on-a-new-page</id>
+        <link href="https://render.com/changelog/see-your-service-s-deploys-on-a-new-page"/>
+        <updated>2026-09-03T00:00:00.000Z</updated>
+        <summary type="html"><![CDATA[<p>Services now have a new <strong>Deploys</strong> page in the Render Dashboard.</p><p>The <strong>Deploys</strong> page features:</p><ul><li>Your service's deploy history, without a date cutoff.</li><li>A <strong>Live</strong> badge indicating the current deploy.</li><li>Status of in-progress deploys.</li><li>A banner flagging when auto-deploys are disabled.</li></ul><p>Previously, deploys were only visible on the <strong>Events</strong> page, interspersed with other events, and capped at a 90-day history. The <strong>Events</strong> page continues to show all service events, including deploys.</p><p>Cron jobs also have new <strong>Builds</strong> and <strong>Runs</strong> pages that separate build and run history.</p><p>Learn more in the <a href="https://render.com/docs/deploys">documentation</a>.</p>]]></summary>
+        <category label="Improved"/>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Introduced the Flex compute plan for Render Workflows]]></title>
+        <id>https://render.com/changelog/introduced-the-flex-compute-plan-for-render-workflows</id>
+        <link href="https://render.com/changelog/introduced-the-flex-compute-plan-for-render-workflows"/>
+        <updated>2026-09-01T00:00:00.000Z</updated>
+        <summary type="html"><![CDATA[<p><a href="https://render.com/docs/workflows">Render Workflows</a> uses a new default compute plan for task runs: <strong><code>flex</code></strong>.</p><p>The <code>flex</code> compute plan provides up to 1 CPU and 4 GB of RAM. Task runs on <code>flex</code> are billed only for the CPU and RAM they actually use, resulting in significantly lower costs for computationally inexpensive runs.</p><p>The <code>flex</code> compute plan replaces the <code>starter</code> and <code>standard</code> compute plans for Render Workflows. Tasks that previously used <code>starter</code> or <code>standard</code> now automatically use <code>flex</code> instead.</p><p>For tasks with higher resource requirements, you can assign a different compute plan in your <a href="https://render.com/docs/workflows-defining#compute-plan">task's definition</a>:</p><pre><code>const myTask = task(
+  {
+    name: 'myTask',
+    plan: '2c-4g' //highlight-line
+  },
+  function myTask(ctx: TaskContext, a: number): number {
+    return a * a
+  }
+)
+</code></pre><p>Learn more about compute plans for Render Workflows in the <a href="https://render.com/docs/workflows-limits#compute-plans">documentation</a>.</p>]]></summary>
+        <category label="New"/>
+    </entry>
+</feed>
