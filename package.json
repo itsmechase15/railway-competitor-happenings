@@ -1,0 +1,34 @@
+{
+  "name": "railway-competitor-happenings",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Daily Discord alerts when Render or Vercel ships something, with what Railway should do about it.",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "run": "tsx src/index.ts",
+    "check-env": "tsx src/setup/check-env.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@cursor/sdk": "^1.0.31",
+    "cheerio": "^1.0.0",
+    "dotenv": "^16.4.7",
+    "fast-xml-parser": "^5.11.1",
+    "pg": "^8.13.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.2.7"
+  }
+}
