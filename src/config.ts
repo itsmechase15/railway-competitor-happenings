@@ -224,7 +224,11 @@ export function loadConfig(): Config {
     lookbackDays: int("LOOKBACK_DAYS", 7),
     maxItemsPerRun: int("MAX_ITEMS_PER_RUN", 12),
     maxItemsPerSource: int("MAX_ITEMS_PER_SOURCE", 8),
-    railwayMaxPages: int("RAILWAY_MAX_PAGES", 120),
+    // Railway publishes a few hundred docs pages and reading all of them takes
+    // under twenty seconds, so the first run builds the whole corpus rather
+    // than a quarter of it. The coverage gate is only as good as the corpus
+    // behind it, and a partial corpus blocks honest actions and misses others.
+    railwayMaxPages: int("RAILWAY_MAX_PAGES", 600),
     railwayRefreshDays: int("RAILWAY_REFRESH_DAYS", 14),
     docsHotRefreshDays: int("DOCS_HOT_REFRESH_DAYS", 3),
     skipRailwayIndex: bool("SKIP_RAILWAY_INDEX", false),

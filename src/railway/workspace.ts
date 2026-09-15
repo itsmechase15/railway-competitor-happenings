@@ -123,7 +123,8 @@ export function renderToc(entries: TocEntry[]): string {
     "",
     ...Object.entries(EVIDENCE_LABEL).map(([kind, label]) => `- \`${kind}\` ${label}`),
     "",
-    "Cite the `url` from a file's header, never the file path.",
+    "A page with no label is product documentation. Cite the `url` from the",
+    "file's own header, never the file path.",
     "",
   ];
 
@@ -135,7 +136,11 @@ export function renderToc(entries: TocEntry[]): string {
     for (const entry of group) {
       const title = entry.page.title || titleFromUrl(entry.page.url);
       const label = entry.page.kind === "docs" ? "" : ` [${entry.page.kind}]`;
-      lines.push(`- ${title}${label} – \`${entry.path}\` – ${entry.page.url}`);
+      // Title and path only. The list goes into every prompt, so a few hundred
+      // pages of URLs would cost more than the page names are worth – and the
+      // URL to cite is in the file's own header, which has to be opened anyway
+      // to quote it.
+      lines.push(`- ${title}${label} \`${entry.path}\``);
     }
     lines.push("");
   }

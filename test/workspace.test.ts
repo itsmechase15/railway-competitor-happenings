@@ -116,11 +116,12 @@ describe("the docs workspace on disk", () => {
 });
 
 describe("the table of contents", () => {
-  it("groups every page by section and names its url", async () => {
+  it("groups every page by section and names the file each one is in", async () => {
     const written = await workspace();
+    const path = written.pathForUrl("https://docs.railway.com/deployments/serverless");
 
     expect(written.toc).toContain("## deployments (1)");
-    expect(written.toc).toContain("https://docs.railway.com/deployments/serverless");
+    expect(written.toc).toContain(`\`${path}\``);
     expect(written.toc).toContain("## changelog (1)");
   });
 

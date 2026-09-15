@@ -13,6 +13,14 @@ const log = createLogger("railway-discover");
 const DOCS_HOSTS = new Set(["docs.railway.com", "docs.railway.app"]);
 const SITE_HOSTS = new Set(["railway.com", "www.railway.com", "railway.app", "www.railway.app"]);
 
+/**
+ * Railway publishes a compare page per competitor and a migrate guide per
+ * platform, and only four of them are pages this bot may ask anyone to edit.
+ * All of them are sales copy, though, so all of them are held as copy: an
+ * action that read a gap off compare-to-northflank read it off marketing.
+ */
+const DOCS_MARKETING_PATTERN = /^\/platform\/(compare-to|migrate-from)-/;
+
 /** Paths on railway.com worth holding: the pages an action may edit, and the changelog. */
 const SITE_MARKETING_PREFIXES = ["/pricing", "/features"];
 const SITE_CHANGELOG_PREFIX = "/changelog";
@@ -70,7 +78,9 @@ export function classifyCorpusUrl(raw: string): PageKind | null {
   const path = url.pathname;
 
   if (DOCS_HOSTS.has(host)) {
-    if (underPrefix(path, COMPARE_AND_MIGRATE_PATHS)) return "marketing";
+    if (underPrefix(path, COMPARE_AND_MIGRATE_PATHS) || DOCS_MARKETING_PATTERN.test(path)) {
+      return "marketing";
+    }
     if (underPrefix(path, DOCS_EXCLUDED_PREFIXES)) return null;
     if (path === "/") return null;
     return "docs";

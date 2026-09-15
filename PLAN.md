@@ -13,8 +13,15 @@ Cursor API key are in Actions secrets.
 
 Keep Railway current on Render and Vercel product moves without anyone reading
 changelogs. One short alert per launch, every morning, that says what shipped,
-how big it is, and the one to three things Railway should do about it. Each
+how big it is, and the zero to three things Railway should do about it. Each
 action opens a GitHub issue so the work lands on a desk.
+
+Zero is a real answer. A competitor shipping something Railway already does
+asks nothing of Railway, and the alert says "None" with one sentence on why.
+The failure mode that matters is the other one: an issue telling Railway to
+build something Railway already ships. One of those costs the credibility of
+every alert after it, so an action that cannot be checked against Railway's own
+docs is dropped rather than filed.
 
 Success = the alerts are read and acted on, not muted.
 
@@ -24,8 +31,10 @@ Success = the alerts are read and acted on, not muted.
 
 - Render and Vercel blogs, Render's changelog, both official X accounts
   (Phase 1+), and a newsletter inbox (Phase 2)
-- Railway's own product docs on docs.railway.com, as the evidence every
+- All of Railway's product docs on docs.railway.com, as the corpus every
   recommendation is checked against
+- Railway's own changelog, as evidence that something shipped whether or not
+  the docs mention it yet
 - Railway's own compare and migrate pages, as the pages a recommendation may
   ask someone to edit
 - Each competitor's own compare-to-Railway page, as context only
@@ -33,8 +42,9 @@ Success = the alerts are read and acted on, not muted.
 **Out**
 
 - One Discord embed per new signal in one channel
-- One GitHub issue per recommended action, in this repo
-- Rows in Supabase so nothing is alerted twice
+- One GitHub issue per recommended action that survived the evidence gate
+- Rows in Supabase so nothing is alerted twice, and a corpus that remembers
+  what Railway documents and when it last changed
 
 ## Competitors and sources
 
@@ -61,23 +71,28 @@ not an outage.
 
 GitHub Actions cron at **14:00 UTC (7am PT)**. One run does:
 
-1. **Refresh the Railway index.** Fetch the hand-listed product docs in
-   `src/railway/products.ts` plus the compare and migrate pages. Store
-   competitor-mentioning paragraphs from the compare pages as `claims`.
-2. **Collect** candidates from every configured source.
-3. **Dedupe** against `items` on `(competitor, source, external_id)`. Only new
+1. **Refresh the docs corpus.** Discover what Railway publishes from the union
+   of the docs sitemap, `llms.txt`, the links held pages carry, and the product
+   catalog. Read what is new or stale, hash each body, retire what has gone.
+   Store competitor-mentioning paragraphs from the compare pages as `claims`.
+2. **Write the workspace.** The corpus as markdown on disk, one file per page
+   plus a table of contents, for the analyst to search.
+3. **Collect** candidates from every configured source.
+4. **Dedupe** against `items` on `(competitor, source, external_id)`. Only new
    rows continue.
-4. **Fill in the body.** A blog diff yields a URL and whatever the listing
+5. **Fill in the body.** A blog diff yields a URL and whatever the listing
    said about it, so fetch the article for the text, and for the title and
    date on the indexes that name neither.
-5. **Analyze** each new item with the Cursor API (`claude-opus-5`) with the
-   Railway docs for the products it touches in context. Parse into impact,
-   one sentence, detail bullets, one to three actions, citations, open
-   questions. Run the guards (see Docs grounding).
-6. **Illustrate and file.** Find the feature image, then open one GitHub issue
-   per action. Store both with the verdict so a retry re-links instead of
-   re-filing.
-7. **Post** one Discord embed per item, then stamp `analyses.posted_at`. An
+6. **Analyze** each new item: BM25 over the corpus pre-loads the ten best
+   excerpts, then one Cursor run (`claude-opus-5`) with read-only search over
+   the workspace and the whole table of contents. Parse into impact, one
+   sentence, detail bullets, zero to three actions with their evidence,
+   citations, open questions. Run the guards and the evidence gate (see Docs
+   grounding).
+7. **Illustrate and file.** Find the feature image, then open one GitHub issue
+   per action that passed every check. Store both with the verdict so a retry
+   re-links instead of re-filing.
+8. **Post** one Discord embed per item, then stamp `analyses.posted_at`. An
    unstamped post is retried for up to three days.
 
 Caps: `MAX_ITEMS_PER_SOURCE` (8) and `MAX_ITEMS_PER_RUN` (12). The first run
@@ -102,6 +117,7 @@ Embed shape, in this order and nothing else:
 4. **More detail** – two to four short bullets.
 5. **Recommended action(s)** – each action as its own field: bold title, one
    sentence that leads with the work, link to that action's own GitHub issue.
+   With no actions, one field reading **None** and one sentence saying why.
 6. **Footer** – competitor · source · model.
 
 Page citations, suggested edits, and open questions live in the issue, not the
@@ -113,9 +129,41 @@ are enforced before posting.
 Same concept as the PostHog bot. Every recommendation is a claim about what
 Railway ships, so it is checked against Railway's product docs first.
 
+**The corpus is the `pages` table.** Not a hand-listed set of pages: the whole
+of what Railway publishes about the product, discovered from the union of the
+docs sitemap, `llms.txt`, the docs links held pages carry, and the catalog
+below, which pins the overview pages the bot routes to. Around 400 docs pages
+in practice, plus the five marketing pages and Railway's own changelog.
+
+No single input is trusted. A sitemap lags a launch, `llms.txt` is a subset
+curated for somebody else's purpose, and a crawl only reaches what something
+already linked. The sibling bot missed an Amplitude consent story because the
+pages it could read were a six-URL allowlist and the privacy docs were not on
+it; a union of sources is the fix, and the union is also what makes the
+coverage gate below possible.
+
+Freshness is a content hash, in two tiers. A re-download that hashes the same
+leaves `changed_at` alone. A page an analyst read in the last three days is
+re-read every three days, the rest every fortnight, and a URL the corpus has
+never held is read the run it turns up. A URL no source has offered for two
+runs in a row is retired, and so is one answering 404 or 410.
+
+Each page carries what it is evidence of:
+
+| Kind | What it proves |
+| --- | --- |
+| `docs` | What Railway ships today. The only evidence a gap claim may rest on |
+| `marketing` | Copy written on some past date. Compare, migrate, and pricing pages. Never evidence about the product, and the only pages an action may ask anyone to edit |
+| `changelog` | Shipped, may be undocumented. Railway ships ahead of its docs, so a changelog entry proves a capability exists and proves nothing about whether the docs mention it |
+
 **Catalog.** `src/railway/products.ts` hand-lists canonical docs.railway.com
-pages, one per product surface, with aliases for the names competitors use.
-Seed list, sorted by what Render and Vercel ship against most:
+pages, one per product surface, with aliases for the names competitors use. It
+no longer decides which pages exist. It does three things on top of the corpus:
+names a surface in Railway's own casing, routes an action to the pages that
+would contradict it, and boosts a surface's overview page in retrieval, because
+"does Railway do this at all" is answered on an overview page and nowhere else.
+Keyword lists stay short for the same reason: they route, so a long tail of
+common words costs accuracy rather than buying reach. Surfaces:
 
 - Deployments, GitHub autodeploys, healthchecks, monorepo, regions, scaling,
   serverless
@@ -131,15 +179,31 @@ Seed list, sorted by what Render and Vercel ship against most:
 - AI: Railway Agent, MCP server, cloud agents, agent integrations
 - Templates, CLI, public API
 
-A surface missing from the catalog is a recommendation with nothing to check
-it against. Every page URL is verified with a request before it is added.
+A surface missing from the catalog is a recommendation nobody gave a nickname;
+the corpus still holds the pages and the coverage gate still reads them. Every
+page URL here is verified with a request before it is added.
 
-**Fetch aid.** Each docs page is available as markdown by appending `.md`.
-`https://docs.railway.com/llms.txt` is an index of those pages and may be used
-in Phase 2 to find a page the catalog does not list. It is not grounding: the
-catalog is.
+**Fetch aid.** Each docs page is available as markdown by appending `.md`,
+which is how the corpus is read: no nav, no cookie banner. `llms-full.txt` may
+be used once to seed an empty corpus in a single request, and never again -
+it is a vendor export, so it is as current as whenever they generated it.
 
-**Guards**, run after the model replies:
+**Retrieval.** BM25 over the stored titles and bodies, with each surface's
+overview page boosted and no more than four hits from one docs section. The top
+ten excerpts are pre-loaded into the prompt as a starting point. Lexical, not
+embeddings, for two reasons: the vocabulary on both sides is the same industry
+jargon, and a lexical hit is something a person can open, which is what lets
+the coverage gate explain itself and a test reproduce it.
+
+**One analyst run.** The corpus is written to disk as markdown with a table of
+contents, and the analyst gets read-only tools over it: read, grep, glob, list.
+The files it opens are recorded from its own tool calls. There is no second
+model pass that reads the first reply and fixes it: a model shown its own
+unsupported claim argues for it better rather than going to check. What
+replaces that pass is this run having the corpus, and code checking every claim
+against the same corpus afterwards.
+
+**Guards**, run after the reply:
 
 - `verifyAgainstDocs` – an action may only say Railway cannot do something
   when a docs excerpt in context shows the gap. A `consider_building` the docs
@@ -153,6 +217,33 @@ catalog is.
   edit targets.
 - `enforceActionLead` – each action opens with the work, not the gap.
 
+**The evidence gate**, which decides what becomes an issue:
+
+- A product action names a `gap` in one line, cites an `evidence_url`, and
+  quotes it. Missing any of the three drops the action.
+- The cited page has to be in the corpus, and it has to be `docs`. Marketing
+  copy is not evidence about the product, and a changelog entry is evidence the
+  thing shipped, which is the opposite of a gap.
+- The quote has to appear on the stored copy of that page, punctuation aside.
+  The analyst read that exact text, so a paraphrase means it did not.
+- **Coverage.** The corpus is searched again with the gap's own words. When it
+  ranks a page above everything the analysis read, the action is dropped: a gap
+  whose words lead straight to a page nobody opened is a gap about a page
+  nobody opened. This is the check a hand-listed allowlist could never do.
+- Pricing, plans, and packaging are not capability gaps. Billing mechanics can
+  be; "their plan costs less" cannot.
+- "Document this" is not an action type, and an action asking for docs to be
+  written is dropped.
+- A page edit has to name a page marketing owns, say what it should say
+  instead, and quote copy that is still on the stored page. A page that no
+  longer says the thing being corrected has already been fixed.
+
+A failed check is never rewritten into a weaker action. There is no way to
+correct a claim whose basis we cannot find without inventing one, so the action
+is dropped and what it said becomes an open question. Zero actions with a
+reason is a normal outcome, and no GitHub issue is opened for anything that
+failed.
+
 Impact never moves for grounding. Impact is about what the competitor shipped.
 
 ## Data store
@@ -165,8 +256,12 @@ Tables, in `migrations/001_init.sql`:
 
 - `items` – one row per signal, unique on `(competitor, source, external_id)`
 - `analyses` – verdict as `jsonb`, feature image, issue numbers, `posted_at`
-- `pages` – Railway pages read, and which competitors they mention
+- `pages` – the docs corpus, and which competitors each page mentions
 - `claims` – competitor-mentioning paragraphs that can be cited
+
+`migrations/003_docs_corpus.sql` gives `pages` the bookkeeping that makes it a
+corpus rather than a cache: `kind`, `content_hash`, `changed_at`,
+`discovered_from`, `missing_streak`, `last_used_at`, and `retired_at`.
 
 None of it is reachable over Supabase's Data API, by
 `migrations/002_close_data_api.sql`: row-level security on with no policies, no
@@ -201,13 +296,22 @@ All in this repo's Actions secrets. Never in the repo, never in a chat.
 Rated on the strongest thing in the post. A label, not a gate: every new
 signal gets an embed.
 
-**Actions**, one to three per signal, most important first:
+**Actions**, zero to three per signal, most important first:
 
 | Action | Means | Target |
 | --- | --- | --- |
 | `consider_enhancing` | Railway has this and the launch beats it. Names the Railway feature | Product |
 | `consider_building` | Railway has nothing like it, shown in the docs | Product |
 | `update_pages` | A Railway compare, migrate, pricing, or features page is now wrong, understated, or unanswered | Marketing |
+
+No new action types, and no "document this": the docs are evidence, and asking
+for them to be written is not work this bot files.
+
+**Zero actions** is an answer, carried as one sentence in `no_action_reason`.
+It happens three ways, and all three are correct: the launch asks nothing of
+Railway because Railway already does it, the launch is minor enough that
+nothing follows from it, or everything recommended failed the evidence gate and
+became an open question instead.
 
 `update_pages` targets only Railway's own pages:
 `platform/compare-to-render`, `platform/compare-to-vercel`,
@@ -216,9 +320,11 @@ signal gets an embed.
 
 ## GitHub issues
 
-One issue per action, in this repo, opened before the embed so every action
-has a link. Title `Competitor: feature – Action`. Body carries the action in
-full, summary, detail, the whole impact scale with this level checked, open
+One issue per action that passed every check, in this repo, opened before the
+embed so every action has a link. An alert with no surviving action opens
+nothing. Title `Competitor: feature – Action`. Body carries the action in
+full, the gap it closes with the docs page it was read off and the line quoted
+from it, summary, detail, the whole impact scale with this level checked, open
 questions, sources, and the image. Product issues cite the docs that back the
 action and end with the docs that would change if Railway ships it. Marketing
 issues carry url + claim today + suggested edit.
@@ -229,13 +335,13 @@ Labels: `competitor-happenings`, `render|vercel`, `source:<label>`,
 ## Phase 1 vs later
 
 **Phase 1** – both blogs and Render's changelog, Opus analysis against the docs
-catalog, Discord embeds, one issue per action, Supabase dedupe, 7am PT cron,
-dry-run and force-post workflows, `check-env`. X source ships in Phase 1 if
+corpus with read-only search over it, the evidence gate, Discord embeds, one
+issue per surviving action, Supabase dedupe, 7am PT cron, dry-run and
+force-post workflows, `check-env`. X source ships in Phase 1 if
 `X_BEARER_TOKEN` is available, otherwise it is skipped with a log line.
 
 **Phase 2** – AgentMail inbox for newsletters (subscribe to Render and Vercel
-product updates), llms.txt as a fetch aid for uncatalogued docs pages, richer
-image chain (screenshot renderer fallback).
+product updates), richer image chain (screenshot renderer fallback).
 
 **Later** – PRs that draft the page edit, weekly digest, replying to an alert
 to change its actions.

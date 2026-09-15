@@ -38,6 +38,22 @@ describe("what belongs in the corpus", () => {
     expect(classifyCorpusUrl("https://railway.com/pricing")).toBe("marketing");
   });
 
+  /**
+   * Railway publishes a compare page per competitor, and only four of them are
+   * pages this bot may ask anyone to edit. Every one of them is sales copy,
+   * so every one of them is held as copy: a gap read off compare-to-northflank
+   * is a gap read off marketing.
+   */
+  it("holds a compare page for a competitor this bot does not watch as copy too", () => {
+    expect(classifyCorpusUrl("https://docs.railway.com/platform/compare-to-northflank")).toBe(
+      "marketing",
+    );
+    expect(classifyCorpusUrl("https://docs.railway.com/platform/migrate-from-heroku")).toBe(
+      "marketing",
+    );
+    expect(classifyCorpusUrl("https://docs.railway.com/platform/railway-metal")).toBe("docs");
+  });
+
   it("holds Railway's own changelog, which is its own kind of evidence", () => {
     expect(classifyCorpusUrl("https://railway.com/changelog/2026-09-01")).toBe("changelog");
     expect(classifyCorpusUrl("https://railway.com/changelog")).toBe("changelog");

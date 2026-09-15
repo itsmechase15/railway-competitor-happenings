@@ -10,8 +10,13 @@ import { EN_DASH, truncate } from "../util/text.js";
 const MAX_BODY_CHARS = 4_000;
 const MAX_CLAIM_CHARS = 400;
 const MAX_DOC_CHARS = 900;
-/** The table of contents is the whole docs site, so it is the biggest thing here. */
-const MAX_TOC_CHARS = 30_000;
+/**
+ * The table of contents is the whole docs site, so it is the biggest thing
+ * here: a few hundred short lines. The budget is generous on purpose – a
+ * truncated list hides whole sections of the docs, which is the exact failure
+ * the list exists to prevent.
+ */
+const MAX_TOC_CHARS = 60_000;
 
 function itemBody(item: StoredItem): string {
   const raw = item.raw as Record<string, unknown>;
