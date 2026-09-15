@@ -51,11 +51,15 @@ items per source and 12 per run.
 
 ## Setup
 
-1. Apply the schema to this bot's own Supabase project:
+1. Apply both migrations to this bot's own Supabase project:
 
 ```bash
 psql "$DATABASE_URL" -f migrations/001_init.sql
+psql "$DATABASE_URL" -f migrations/002_close_data_api.sql
 ```
+
+   The first creates the four tables. The second takes them off Supabase's Data
+   API, and it is not optional. See below for why.
 
 2. Add the secrets under **Settings → Secrets and variables → Actions**. Values
    never go in the repo.
@@ -82,6 +86,35 @@ psql "$DATABASE_URL" -f migrations/001_init.sql
 The direct `db.<ref>.supabase.co` host is IPv6 only and GitHub's runners have
 no IPv6 route, so `DATABASE_URL` has to be the Session pooler URI. `check-env`
 warns when it is not.
+
+## On Supabase, the tables are on the Data API until you close them
+
+Supabase serves every table in `public` over PostgREST, and the default
+privileges on that schema give `anon` and `authenticated` full insert, update,
+and delete on anything created in it. Row-level security is off on a new table.
+Nobody did anything wrong to get there, but a fresh project answers this from
+the open internet:
+
+```sh
+curl "https://<ref>.supabase.co/rest/v1/items?select=*" -H "apikey: <publishable key>"
+```
+
+That is one read. The same key also takes `PATCH` and `DELETE`. Supabase flags
+it as `rls_disabled_in_public`, at critical, and the flag is right even for a
+bot that has no browser client anywhere near it.
+
+Nothing here uses that path. The only way in is `DATABASE_URL`, over the
+session pooler as `postgres`, which has BYPASSRLS. So
+[`migrations/002_close_data_api.sql`](./migrations/002_close_data_api.sql)
+enables row-level security with no policies, revokes the `anon` and
+`authenticated` grants, and revokes the schema default privileges that would
+hand the same thing to the next table someone adds. A run cannot tell the
+difference.
+
+Worth doing as well, in the dashboard: **Project Settings → Data API → off**.
+The bot never calls PostgREST, and turning it off closes the surface rather
+than emptying it, which is the one setting a later migration cannot undo by
+accident.
 
 ## Local use
 
@@ -115,6 +148,8 @@ alert says so in its footer. With `DRY_RUN=true` it needs no database.
 | `src/github/` | One issue per recommended action |
 | `src/db/` | Postgres, the in-memory store for dry runs, and the dedupe contract |
 | `src/pipeline.ts` | The daily cycle, and single-item mode |
+| `migrations/001_init.sql` | The four tables |
+| `migrations/002_close_data_api.sql` | Takes those tables off Supabase's Data API |
 
 ## Not this
 
