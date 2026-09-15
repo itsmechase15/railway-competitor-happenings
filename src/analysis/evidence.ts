@@ -324,7 +324,7 @@ export function gateActions(analysis: Analysis, context: CoverageContext): GateR
         ? {
             noActionReason:
               analysis.noActionReason ??
-              `Nothing here survived the evidence checks, so this alert asks for no work. The open questions say what could not be verified.`,
+              "Nothing here survived the evidence checks, so this alert asks for no work. The open questions say what could not be verified.",
           }
         : {}),
     },
