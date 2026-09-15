@@ -3,18 +3,28 @@
 A bot that tells Railway when Render or Vercel ships something, and what to do
 about it.
 
-Every morning at 7am PT it reads both competitors' changelogs and blogs (X too,
-when a bearer token is set), drops anything already seen, and sends what is new
-to Opus with Railway's own product docs in front of it. Each new launch becomes
-one Discord embed: a feature image, one sentence on what changed with a source
-link, an impact label (Minor / Notable / Major), a few detail bullets, and one
-to three recommended actions. Each action opens its own GitHub issue in this
-repo, and the embed links it.
+Every morning at 7am PT it reads both competitors' blogs and Render's changelog
+(X too, when a bearer token is set), drops anything already seen, and sends
+what is new to Opus with Railway's own product docs in front of it. Each new
+launch becomes one Discord embed: a feature image, one sentence on what changed
+with a source link, an impact label (Minor / Notable / Major), a few detail
+bullets, and one to three recommended actions. Each action opens its own GitHub
+issue in this repo, and the embed links it.
 
 Recommendations are checked against Railway's docs before they ship. An action
 may only say Railway lacks something when a docs page shows the gap, and a page
 edit may only target Railway's own compare, migrate, pricing, or features
 pages. Docs are evidence, never edit targets.
+
+## Sources
+
+| Competitor | Read | Not read |
+| --- | --- | --- |
+| Render | Changelog feed at `https://render.com/changelog/feed.xml`, blog index at `https://render.com/blog`, `@render` | |
+| Vercel | Blog index at `https://vercel.com/blog`, `@vercel` | Its changelog. The only feed Vercel publishes mixes changelog entries into the blog, so there is no reading one without the other |
+
+A changelog entry is labelled `changelog`; a blog post is labelled `article`,
+whether the site describes it on the listing or only links it.
 
 ## Status
 
@@ -98,7 +108,7 @@ alert says so in its footer. With `DRY_RUN=true` it needs no database.
 
 | Path | What lives there |
 | --- | --- |
-| `src/sources/` | Changelog feeds, blog sitemaps, the blog-index diff for a site with no sitemap, X, and article enrichment |
+| `src/sources/` | Changelog feeds, the blog-index read (cards where the listing describes its posts, bare links where it does not), blog sitemaps, X, and article enrichment |
 | `src/railway/` | The docs catalog (`products.ts`), what a page action may target (`pages.ts`), the per-signal docs context, and the index refresh |
 | `src/analysis/` | The prompt, the reply schema, the docs-grounding guards, and the no-key fallback |
 | `src/discord/` | The embed and the bot that posts it |

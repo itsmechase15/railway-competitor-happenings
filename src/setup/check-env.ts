@@ -16,7 +16,7 @@ const log = createLogger("check-env");
  *
  * Only the required secrets fail it. A missing source secret – X today – is
  * named and skipped, because the plan has X optional from phase 1 on and a run
- * without it still posts both changelogs and both blogs.
+ * without it still posts both blogs and Render's changelog.
  *
  *   npm run check-env               what is missing, and what that costs
  *   npm run check-env -- --strict   every variable and whether it is set

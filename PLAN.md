@@ -22,8 +22,8 @@ Success = the alerts are read and acted on, not muted.
 
 **In**
 
-- Render and Vercel changelogs, blogs, official X accounts (Phase 1+), and a
-  newsletter inbox (Phase 2)
+- Render and Vercel blogs, Render's changelog, both official X accounts
+  (Phase 1+), and a newsletter inbox (Phase 2)
 - Railway's own product docs on docs.railway.com, as the evidence every
   recommendation is checked against
 - Railway's own compare and migrate pages, as the pages a recommendation may
@@ -40,8 +40,8 @@ Success = the alerts are read and acted on, not muted.
 
 | Competitor | Changelog | Blog | X |
 | --- | --- | --- | --- |
-| Render | Atom feed at `https://render.com/changelog/feed.xml` | `https://render.com/blog`, diffed run over run (Render has no public sitemap at the root, so the blog index is the diff target) | `@render` |
-| Vercel | Atom feed at `https://vercel.com/atom` (changelog + blog in one feed) | `https://vercel.com/blog`, sitemap at `https://vercel.com/crawled-sitemap.xml` | `@vercel` |
+| Render | Atom feed at `https://render.com/changelog/feed.xml` | `https://render.com/blog`, diffed run over run (Render has no public sitemap at the root, so the blog index is the diff target). The index publishes bare links, so a new post reaches analysis with a URL and nothing else, and the article fetch fills in the title and the date | `@render` |
+| Vercel | Not read. The only feed Vercel publishes, `https://vercel.com/atom`, mixes changelog entries into the blog and cannot be read for one without the other | `https://vercel.com/blog`, diffed run over run. The index describes each post it lists, so a candidate off it already carries the post's own title and its publish date | `@vercel` |
 
 Every signal carries one of four source labels, used in the embed, the footer,
 and the issue: `article` (anything published on the competitor's own site
@@ -53,7 +53,9 @@ about Railway: `https://vercel.com/compare/railway` and
 `https://render.com/docs/migrate-from-railway`.
 
 A source that is unconfigured or throwing is logged and skipped. One broken
-feed never takes down the run.
+feed never takes down the run. A competitor with no changelog is skipped
+silently rather than noted as a failure: Vercel not having one is the design,
+not an outage.
 
 ## Daily loop
 
@@ -65,8 +67,9 @@ GitHub Actions cron at **14:00 UTC (7am PT)**. One run does:
 2. **Collect** candidates from every configured source.
 3. **Dedupe** against `items` on `(competitor, source, external_id)`. Only new
    rows continue.
-4. **Fill in the body.** A blog diff only yields a URL, so fetch the article
-   for a title and text.
+4. **Fill in the body.** A blog diff yields a URL and whatever the listing
+   said about it, so fetch the article for the text, and for the title and
+   date on the indexes that name neither.
 5. **Analyze** each new item with the Cursor API (`claude-opus-5`) with the
    Railway docs for the products it touches in context. Parse into impact,
    one sentence, detail bullets, one to three actions, citations, open
@@ -220,7 +223,7 @@ Labels: `competitor-happenings`, `render|vercel`, `source:<label>`,
 
 ## Phase 1 vs later
 
-**Phase 1** – changelogs + blogs for both, Opus analysis against the docs
+**Phase 1** – both blogs and Render's changelog, Opus analysis against the docs
 catalog, Discord embeds, one issue per action, Supabase dedupe, 7am PT cron,
 dry-run and force-post workflows, `check-env`. X source ships in Phase 1 if
 `X_BEARER_TOKEN` is available, otherwise it is skipped with a log line.

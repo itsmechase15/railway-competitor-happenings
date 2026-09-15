@@ -56,7 +56,7 @@ describe("the environment preflight", () => {
 
   /**
    * The plan has X optional from phase 1 on. A repo that never gets a bearer
-   * token still posts both changelogs and both blogs every morning, so a red
+   * token still posts both blogs and Render's changelog every morning, so a red
    * preflight over it would be telling an operator to fix a working repo.
    */
   it("never fails over a missing X token, --strict included", () => {
