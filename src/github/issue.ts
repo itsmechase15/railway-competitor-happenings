@@ -178,6 +178,28 @@ function docsThatWouldChangeSection(
 }
 
 /**
+ * The gap, and the page it was read off, quoted.
+ *
+ * This is what the issue is standing on, so it goes near the top: the reader's
+ * first question about "Railway should build X" is "are we sure we don't?", and
+ * the answer is a line from Railway's own docs with a link to the page it is
+ * on. An action with no gap named is a page edit, which carries its evidence
+ * further down as the copy to change.
+ */
+function evidenceSection(action: RecommendedAction): string | null {
+  if (!action.gap) return null;
+
+  const lines = [`## The gap this closes\n${action.gap}`];
+  if (action.evidenceUrl) {
+    const quote = action.evidenceQuote
+      ? `\n> ${action.evidenceQuote.replace(/\n+/g, " ")}`
+      : "";
+    lines.push(`\nChecked against ${action.evidenceUrl}${quote}`);
+  }
+  return lines.join("\n");
+}
+
+/**
  * The whole scale as a task list, each level with what it means, so a reader
  * who does not carry the rule in their head can see where this one sits and
  * why. The embed keeps the single label; an issue has the room.
@@ -212,6 +234,7 @@ export function buildIssueBody(
     `**${competitor.label}** · ${SOURCE_LABEL[item.source]} · published ${published} · impact **${IMPACT_LABEL[analysis.impact]}** · owned by **${actionOwner(action)}**`,
     image ? `<img src="${image.url}" alt="${image.altText}" width="720" />` : null,
     `## Recommended action\n**${actionLabel(action)}**${SPACED_EN_DASH}${action.detail}`,
+    evidenceSection(action),
     `## What you need to know\n${analysis.summary}`,
     `## Impact\n${impactScale(analysis.impact)}`,
     `## More detail\n${bullets(analysis.keyPoints, "The source gave nothing beyond the summary above.")}`,

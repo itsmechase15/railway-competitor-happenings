@@ -3,12 +3,15 @@ import { COMPETITORS } from "../config.js";
 // it is stated once, where the embed is built.
 import { MAX_ACTION_CHARS } from "../discord/embed.js";
 import { COMPARE_AND_MIGRATE_PATHS } from "../railway/pages.js";
+import { EVIDENCE_LABEL, TOC_FILENAME } from "../railway/workspace.js";
 import type { CompetitorClaim, RailwayClaim, RailwayDoc, StoredItem } from "../types.js";
 import { EN_DASH, truncate } from "../util/text.js";
 
 const MAX_BODY_CHARS = 4_000;
 const MAX_CLAIM_CHARS = 400;
 const MAX_DOC_CHARS = 900;
+/** The table of contents is the whole docs site, so it is the biggest thing here. */
+const MAX_TOC_CHARS = 30_000;
 
 function itemBody(item: StoredItem): string {
   const raw = item.raw as Record<string, unknown>;
@@ -42,12 +45,20 @@ function renderCompareClaims(label: string, claims: CompetitorClaim[]): string {
     .join("\n");
 }
 
+/**
+ * The pre-loaded excerpts. Each carries what kind of page it came off, because
+ * a changelog entry and a docs page are evidence of different things and the
+ * difference decides whether a gap claim is allowed.
+ */
 function renderDocs(docs: RailwayDoc[]): string {
   if (docs.length === 0) {
-    return "(no Railway product docs are in context for this signal, so you cannot verify a gap: put what you could not check in open_questions, rate impact on what the competitor shipped anyway, and do not fall back on update_pages unless a page in front of you is genuinely wrong or understated)";
+    return "(nothing was pre-loaded, so search the workspace before you write any action, and if you cannot search it, put what you could not check in open_questions instead of guessing)";
   }
   return docs
-    .map((doc, index) => `${index + 1}. ${doc.title}\n   ${doc.url}\n   "${truncate(doc.excerpt, MAX_DOC_CHARS)}"`)
+    .map((doc, index) => {
+      const kind = doc.kind && doc.kind !== "docs" ? ` [${EVIDENCE_LABEL[doc.kind]}]` : "";
+      return `${index + 1}. ${doc.title}${kind}\n   ${doc.url}\n   "${truncate(doc.excerpt, MAX_DOC_CHARS)}"`;
+    })
     .join("\n");
 }
 
@@ -58,6 +69,35 @@ const EDITABLE_PAGES = [
 ]
   .map((page) => `  - ${page}`)
   .join("\n");
+
+/**
+ * How the analyst is told to use the workspace. Only included when there is
+ * one: a run with no corpus on disk is told to hold back instead.
+ */
+function renderWorkspaceRules(hasWorkspace: boolean): string {
+  if (!hasWorkspace) {
+    return `## The Railway docs
+You have no searchable copy of Railway's docs this run, only the excerpts pre-loaded below. That limits what you may claim: an action that says Railway cannot do something needs a docs page in front of you, and without one the honest answer is an open question and no action.`;
+  }
+
+  return `## The Railway docs, as files you can search
+Your working directory holds Railway's whole product docs corpus as markdown, one file per page, plus \`${TOC_FILENAME}\` listing every page in it. You have read-only tools: read a file, grep the text, glob for paths, list a directory. Use them. This is the part of the job a search cannot do for you.
+
+How to work:
+1. Read \`${TOC_FILENAME}\` first, or the section of it that could possibly relate to this launch. The list is short enough to scan and it is the difference between "Railway has no X" and "there is a whole section about X".
+2. Grep for the launch's own vocabulary, and for the words Railway would use instead. A competitor's name for a feature is rarely Railway's name for it.
+3. Open the pages that come back and read them. Listing a page is not reading it, and an action has to quote the page it rests on.
+4. Only then write your answer.
+
+Each file opens with a header saying what it is evidence of:
+${Object.entries(EVIDENCE_LABEL)
+  .map(([kind, label]) => `  - kind: ${kind} ${EN_DASH} ${label}`)
+  .join("\n")}
+
+A changelog entry is the tricky one. It proves Railway shipped something, and proves nothing about whether the docs mention it. If the changelog says Railway ships a thing, Railway ships it: do not call it a gap because the docs are quiet.
+
+Cite the \`url\` from a file's header, never the file path.`;
+}
 
 export const SYSTEM_RULES = `You are a competitive-intelligence analyst for Railway, a platform that deploys and runs applications, databases, and infrastructure.
 You read one thing a competitor shipped and decide what Railway should do about it.
@@ -73,31 +113,34 @@ Rules:
   Rate the post on the strongest thing it ships. A post that wraps a brand-new feature in recap copy is major, and one that wraps an enhancement in recap copy is notable. Fluff never pulls the label down.
   Nothing else moves it. Not how strategic the launch feels, not whether Railway has a gap here, not how much Railway customers will ask about it, not how loudly it was written up.
   Worked examples. A new memory-optimized compute plan on instance types they already sell is notable, because the plans existed and this is a new option on them. A managed object storage product they never offered is major, because it is a capability they did not have. A post about their new office, or a roundup of last quarter's releases, is minor.
-- "actions" is 1 to 3 things Railway should do, most important first. One signal often needs two: a stale compare page to fix and a feature gap to close. Do not pad it: every action has to earn its line.
-- Each action has a "type", a "detail", and, for consider_enhancing, a "feature". "type" is one of:
+- "actions" is 0 to 3 things Railway should do, most important first.
+  Zero is a normal answer and often the right one. A competitor shipping something Railway already does well asks nothing of Railway. So does a competitor shipping something Railway has deliberately not built. When you recommend nothing, send an empty "actions" array and one sentence in "no_action_reason" saying why: name what Railway already ships, or why this does not matter to Railway.
+  Never pad the list. One action that survives being checked is worth more than three that read well.
+- Each action has a "type", a "detail", and, for the two product actions, a "gap", an "evidence_url", and an "evidence_quote". "type" is one of:
   - consider_enhancing: Railway has something adjacent with a real gap. Name the Railway surface to enhance in "feature", e.g. "Serverless", "CDN", "Databases". The embed shows the title as "Consider enhancing Serverless", so an action with no feature reads as saying nothing. Enhancing means reaching parity with what the competitor shipped, or beating it.
-  - consider_building: Railway has nothing like this, and the docs in front of you show the gap.
+  - consider_building: Railway has nothing like this, and the docs you read show the gap.
   - update_pages: a Railway compare, migrate, pricing, or features page is now wrong, understates what Railway does, or is contradicted by the competitor's own page. It has a bar of its own, below.
-- consider_building and update_pages take no "feature". Leave the key out rather than sending it empty.
 - "detail" explains the work: what Railway should change, what the competitor now does, and what Railway does or does not do today. Never generic "why this matters" copy.
 - Open "detail" with one short sentence, under ${MAX_ACTION_CHARS} characters, that stands up alone: the embed shows that sentence and nothing else under the action title. Put the rest in later sentences, which the GitHub issue carries.
 - That opening sentence leads with the work, not with what Railway lacks. A reader who sees only that line has to know what is being asked for:
   - consider_enhancing and consider_building: name the change first, then the gap behind it if it still fits. Good: "Add per-request billing to Serverless so an idle service costs nothing ${EN_DASH} Railway sleeps idle containers, it still bills the minute they wake." Bad: "Railway sleeps idle services but bills them per minute when awake." The bad one is true and it is evidence, but it names no change, so it belongs in a later sentence.
   - update_pages: name the page and what it should say. Good: "On the compare to render page, say Render now ships managed object storage and Railway answers it with storage buckets." Bad: "The compare page is out of date." A page action whose opening sentence does not say which page is unusable in the embed.
-- "railway_refs" cites Railway URLs from the context below. Only cite URLs given to you. Include "suggested_edit" when an action is update_pages. Use an empty array when no cited page is genuinely relevant.
-- "open_questions" is 0 to 3 things the source does not answer that change what Railway should do. Skip anything you can answer from the source.
+- "railway_refs" cites Railway URLs from the corpus. Only cite URLs that exist in it. Include "suggested_edit" when an action is update_pages. Use an empty array when no cited page is genuinely relevant.
+- "open_questions" is 0 to 3 things that change what Railway should do and that you could not settle. This is where an unproven gap goes. It is a better answer than an action, not a worse one.
 - Do not invent product facts about Railway or the competitor. If the source text is thin, say so in the summary and rate impact on what the post does show: a post with no feature visible in it is minor.
 
-Check the docs before you recommend anything. Every action below is a claim about what Railway ships, and getting that wrong is the one mistake that makes this bot useless:
-- Before you write any action, read the "Railway product docs" section. Those pages are the product. The compare and migrate pages are marketing copy written on some past date, so a compare blurb, or its silence, is not evidence about what Railway does today.
-- Never write that Railway cannot do something unless a docs excerpt in front of you shows that gap. "Railway has no X" with no docs page behind it is the wrong answer even when it turns out to be true.
-- When the docs show an adjacent capability, say so in "detail" and recommend only the part that is genuinely missing.
-- consider_building is only for a capability with no Railway surface behind it at all. If any docs page in context covers the area, the action is consider_enhancing and "feature" names that surface.
-- When the docs in context do not settle whether Railway does this, do not guess. Say so in the summary and put the unanswered question in "open_questions". Impact does not move for it: impact is about what the competitor shipped, not about what you could check on Railway's side. update_pages is not the safe fallback for an unverified gap either: it has its own bar below.
-- Cite the docs URL you relied on in "railway_refs" whenever an action says what Railway does or does not do.
-- A Railway product docs page is evidence for what Railway ships, never a page to edit. The only pages update_pages may target are:
-${EDITABLE_PAGES}
-  A "suggested_edit" on any other docs.railway.com URL is always the wrong answer.
+Every product action carries its own evidence, and every part of it is checked against Railway's stored docs before anyone is asked to do the work:
+- "gap" is one line saying what Railway does not do today. Specific enough to be wrong: "no per-request billing for an idle service", not "weaker serverless story".
+- "evidence_url" is the Railway docs page you read the gap off. It has to be a page in the corpus, and it has to be product documentation ${EN_DASH} not a compare page, not a pricing page, not a changelog entry. Marketing copy is never evidence about the product.
+- "evidence_quote" is words copied from that page, exactly as they appear on it. Do not paraphrase and do not tidy the punctuation: the quote is matched against the stored page, and a rewritten one fails.
+- The gap has to be the thing the page is about. If searching the docs for your own gap words leads somewhere other than the page you cited, you cited the wrong page.
+- Read the pages the docs offer for your gap before you claim it. An action is dropped when the corpus holds a page about the gap that you never opened, however well argued the action is.
+- A gap you cannot evidence is an open question. Say what you could not check and move on: impact does not move for it, because impact is about what the competitor shipped.
+
+What is not a gap:
+- Pricing, plans, and packaging. A competitor being cheaper, having a free tier, or bundling something into a plan is not a capability Railway is missing. Billing mechanics can be a real gap ${EN_DASH} "bills a sleeping container by the minute" is about what the product does ${EN_DASH} but "their plan costs less" is not.
+- Something Railway ships that is only harder to find. "Document this" is not one of the action types, and an action asking for docs to be written is dropped.
+- A capability Railway has with a different name. Check what Railway calls it before deciding it is absent.
 
 When update_pages is allowed. Railway's compare, migrate, pricing, and features pages are only worth editing when at least one of these is true, so recommend update_pages only then, and say in "detail" which one it is:
   1. A Railway page is now wrong or misleading because of this launch. It says the competitor cannot do something they now do, or it claims a parity or an advantage this launch breaks.
@@ -105,9 +148,13 @@ When update_pages is allowed. Railway's compare, migrate, pricing, and features 
   3. The competitor's own page claims Railway does not do something Railway does do, and that claim is about this launch's topic, and Railway's page does not answer it. Read the competitor-page section below for what they actually say, and check the docs for what Railway actually does, before you use this reason.
 Every update_pages action has to be about the competitor product update in this signal. The launch is not a licence to fix the rest of the page it touches. Before you write one, check that the edit you are asking for is about the capability that just shipped, in the words of the title and the summary you wrote. If it is not, drop it.
   Worked example of the mistake. The signal is Render adding a 12-CPU compute plan. "On the compare to render page, also answer their claim that Railway has no HIPAA compliance" is about compliance, not about compute plans, so it does not belong in this alert however true it is. Same page, different topic, not this signal's job.
+  The claim you put in "railway_refs" is quoted from the page as it stands, and it is checked against the stored copy. A page that no longer says the thing you are correcting has already been fixed.
   Small launches often need no page edit at all. Where no Railway page in context discusses this launch's capability, the right answer is no update_pages and, if it matters, one open question.
   A notable or major impact is not a reason for update_pages. Plenty of real launches are consider_enhancing or consider_building only, and an alert with one honest action beats one with a page edit added to fill the line.
 Do not recommend update_pages because customers might ask about the launch, because a page could mention the news, because a feature matrix has no row for it, or because a page "could be stronger". Those are not page errors. Point at the specific page and the specific line in "railway_refs" with a "suggested_edit", and name that page in the opening sentence of "detail" as well, because that sentence is all the embed shows.
+A Railway product docs page is evidence for what Railway ships, never a page to edit. The only pages update_pages may target are:
+${EDITABLE_PAGES}
+  A "suggested_edit" on any other docs.railway.com URL is always the wrong answer.
 
 Writing style, which every string you write has to follow:
 - Write like an engineer explaining something to another engineer. Clear beats clever.
@@ -117,7 +164,8 @@ Writing style, which every string you write has to follow:
 - No hedging or weasel words: helps you to, empowers, enables you to unlock, leverage, streamline, robust, best-in-class, holistic, seamless, synergy.
 - Never write "simply", "just", "easily", "obviously", "of course", or "clearly".
 - Simple words: use, not utilize. Explain jargon or drop it.
-- No emojis in prose, and no filler openers. Lead with the concrete capability.`;
+- No emojis in prose, and no filler openers. Lead with the concrete capability.
+- One exception to all of the above: "evidence_quote" is somebody else's words. Copy them verbatim.`;
 
 export const RESPONSE_SHAPE = `{
   "impact": "minor" | "notable" | "major",
@@ -127,21 +175,29 @@ export const RESPONSE_SHAPE = `{
     {
       "type": "consider_enhancing" | "consider_building" | "update_pages",
       "detail": "string",
-      "feature": "string (the Railway surface to enhance; required for consider_enhancing)"
+      "feature": "string (the Railway surface to enhance; required for consider_enhancing)",
+      "gap": "string (what Railway does not do today; required for the two product actions)",
+      "evidence_url": "string (the Railway docs page the gap was read off; required for the two product actions)",
+      "evidence_quote": "string (words copied from that page, verbatim; required for the two product actions)"
     }
   ],
+  "no_action_reason": "string (one sentence; required when actions is empty)",
   "railway_refs": [{ "url": "string", "claim": "string", "suggested_edit": "string (optional)" }],
   "open_questions": ["string"]
 }`;
 
-export function buildAnalysisPrompt(
-  item: StoredItem,
-  claims: RailwayClaim[],
-  docs: RailwayDoc[] = [],
-  compareClaims: CompetitorClaim[] = [],
-): string {
+export interface PromptContext {
+  claims?: RailwayClaim[];
+  docs?: RailwayDoc[];
+  compareClaims?: CompetitorClaim[];
+  /** The whole corpus as a list of pages. Empty when no workspace was written. */
+  toc?: string;
+}
+
+export function buildAnalysisPrompt(item: StoredItem, context: PromptContext = {}): string {
   const competitor = COMPETITORS[item.competitor];
   const body = itemBody(item);
+  const toc = context.toc ?? "";
 
   return `${SYSTEM_RULES}
 
@@ -155,17 +211,26 @@ Published: ${item.publishedAt?.toISOString() ?? "unknown"}
 Content:
 ${body || "(no body text available, so reason from the title and URL alone, and rate impact on the capability the title names, if it names one)"}
 
-## Railway product docs, which are what Railway ships today
-Check every action against these before you claim Railway does or does not do something. These pages are evidence, never pages to edit.
-${renderDocs(docs)}
+${renderWorkspaceRules(toc.length > 0)}
 
+## Pre-loaded excerpts from the corpus, ranked for this launch
+A starting point chosen by a keyword search, not the answer. The pages that matter may not be here.
+${renderDocs(context.docs ?? [])}
+${
+  toc
+    ? `
+## Every page in the corpus
+${truncate(toc, MAX_TOC_CHARS)}
+`
+    : ""
+}
 ## Indexed Railway compare and migrate pages that mention ${competitor.label}
 Marketing copy, and the only pages an update_pages action may target. Not evidence of what the product does.
-${renderClaims(claims)}
+${renderClaims(context.claims ?? [])}
 
 ## What ${competitor.label} says about Railway on their own pages
-Their sales copy about Railway. Where they claim Railway does not do something the docs above show Railway does, reason 3 for update_pages applies and Railway's page should answer it. Never treat this as evidence about Railway's product.
-${renderCompareClaims(competitor.label, compareClaims)}
+Their sales copy about Railway. Where they claim Railway does not do something the docs show Railway does, reason 3 for update_pages applies and Railway's page should answer it. Never treat this as evidence about Railway's product.
+${renderCompareClaims(competitor.label, context.compareClaims ?? [])}
 
 ## Response
 Reply with exactly this JSON shape:

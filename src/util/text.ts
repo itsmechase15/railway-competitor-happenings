@@ -57,6 +57,39 @@ export function firstSentence(input: string, max = 240): string {
   return truncate(first ?? collapseWhitespace(input), max);
 }
 
+/** Word characters, for every reader that wants a text as a bag of words. */
+export const WORD_PATTERN = /[a-z0-9]+/g;
+
+/**
+ * Fold a word to a stem crude enough to be predictable: cache, caches, cached,
+ * and caching all have to land on the same token, and scaling has to land on
+ * scale. Plurals go first, so plans and plan meet rather than parting.
+ *
+ * Shared by the topic guard, which decides whether a page edit is about this
+ * launch, and by corpus retrieval, which has to match a launch's words against
+ * a docs page written years earlier in the plural.
+ */
+export function stem(word: string): string {
+  let stemmed = singular(word);
+  if (stemmed.length > 4 && stemmed.endsWith("ing")) stemmed = stemmed.slice(0, -3);
+  else if (stemmed.length > 4 && stemmed.endsWith("ed")) stemmed = stemmed.slice(0, -2);
+  if (stemmed.length > 4 && stemmed.endsWith("e")) stemmed = stemmed.slice(0, -1);
+  // "shipping" and "shipped" lose a doubled consonant that "ship" never had.
+  return stemmed.replace(/([bdgklmnprt])\1$/, "$1");
+}
+
+function singular(word: string): string {
+  if (word.length > 4 && word.endsWith("ies")) return `${word.slice(0, -3)}y`;
+  if (word.length > 4 && /(?:ss|s|x|z|ch|sh)es$/.test(word)) return word.slice(0, -2);
+  if (word.length > 3 && word.endsWith("s") && !word.endsWith("ss")) return word.slice(0, -1);
+  return word;
+}
+
+/** A text as its stems, in order, with everything that is not a word dropped. */
+export function stems(text: string): string[] {
+  return (text.toLowerCase().match(WORD_PATTERN) ?? []).map(stem);
+}
+
 /**
  * Parse a date from a feed or API payload. Returns null rather than an
  * Invalid Date so callers can treat "no date" and "bad date" the same way.

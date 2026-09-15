@@ -2,12 +2,20 @@ import { randomUUID } from "node:crypto";
 import type {
   CandidateItem,
   CompetitorId,
+  PageKind,
+  PageMeta,
   RailwayClaim,
   RailwayPage,
   SourceId,
   StoredItem,
 } from "../types.js";
-import { itemKey, type PendingPost, type RecordAnalysisInput, type Store } from "./store.js";
+import {
+  itemKey,
+  type CorpusBookkeeping,
+  type PendingPost,
+  type RecordAnalysisInput,
+  type Store,
+} from "./store.js";
 
 /**
  * Non-persistent store used when `DATABASE_URL` is unset. It lets a dry run
@@ -60,8 +68,14 @@ export class MemoryStore implements Store {
     return [];
   }
 
-  async getIndexedPageUrls(): Promise<Map<string, Date>> {
-    return new Map([...this.pages.values()].map((page) => [page.url, page.fetchedAt]));
+  async listPageMeta(): Promise<PageMeta[]> {
+    return [...this.pages.values()].map(({ text: _text, mentions: _mentions, ...meta }) => meta);
+  }
+
+  async loadCorpus(kinds?: PageKind[]): Promise<RailwayPage[]> {
+    return [...this.pages.values()]
+      .filter((page) => page.retiredAt === null && (!kinds || kinds.includes(page.kind)))
+      .sort((a, b) => a.url.localeCompare(b.url));
   }
 
   async getPages(urls: string[]): Promise<RailwayPage[]> {
@@ -70,8 +84,38 @@ export class MemoryStore implements Store {
       .filter((page): page is RailwayPage => page !== undefined);
   }
 
-  async upsertPage(page: RailwayPage): Promise<void> {
-    this.pages.set(page.url, page);
+  async savePage(page: RailwayPage): Promise<void> {
+    const existing = this.pages.get(page.url);
+    this.pages.set(page.url, {
+      ...page,
+      lastUsedAt: page.lastUsedAt ?? existing?.lastUsedAt ?? null,
+      retiredAt: null,
+    });
+  }
+
+  async recordCorpusRun(update: CorpusBookkeeping): Promise<void> {
+    for (const record of update.seen) {
+      const page = this.pages.get(record.url);
+      if (page) this.pages.set(page.url, { ...page, missingStreak: 0, discoveredFrom: record.sources });
+    }
+    for (const url of update.missing) {
+      const page = this.pages.get(url);
+      if (page) {
+        this.pages.set(url, {
+          ...page,
+          missingStreak: page.missingStreak + 1,
+          discoveredFrom: [],
+        });
+      }
+    }
+    for (const url of update.retired) {
+      const page = this.pages.get(url);
+      if (page && page.retiredAt === null) this.pages.set(url, { ...page, retiredAt: update.at });
+    }
+    for (const url of update.used) {
+      const page = this.pages.get(url);
+      if (page) this.pages.set(url, { ...page, lastUsedAt: update.at });
+    }
   }
 
   async replaceClaimsForUrl(url: string, claims: RailwayClaim[]): Promise<void> {

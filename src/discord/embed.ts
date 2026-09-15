@@ -165,6 +165,26 @@ export function actionEntries(alert: Alert): ActionIssue[] {
   }));
 }
 
+/** What the action field says when there is nothing to do. */
+export const NO_ACTION_TITLE = "None";
+const FALLBACK_NO_ACTION_REASON =
+  "Nothing here asks anything of Railway, and no reason was recorded.";
+
+/**
+ * Zero actions rendered as an answer rather than as a blank.
+ *
+ * A launch that asks nothing of Railway is a normal outcome and a useful one:
+ * it says somebody looked. An empty field would read as a broken alert, and a
+ * missing field would read as an alert nobody finished, so the reason goes
+ * where the actions would have been.
+ */
+export function noActionValue(alert: Alert): string {
+  const reason = alert.analysis.noActionReason?.trim() || FALLBACK_NO_ACTION_REASON;
+  return [`**${NO_ACTION_TITLE}**`, escape(truncate(reason, EMBED_LIMITS.fieldValue - 40))].join(
+    "\n",
+  );
+}
+
 /** How much of Discord's 6000-character budget an embed spends. */
 export function embedLength(embed: DiscordEmbed): number {
   return (
@@ -238,8 +258,13 @@ export function buildDiscordEmbed(alert: Alert): DiscordEmbed {
       value: actionFieldValue(entry.action, entry.issue),
     });
   }
+  if (entries.length === 0) {
+    fields.push({ name: ACTION_HEADING, value: noActionValue(alert) });
+  }
 
-  if (issueNote && entries.every((entry) => entry.issue === null)) {
+  // `every` on an empty list is true, which used to put "GitHub issues not
+  // created" under an alert that never asked for one.
+  if (issueNote && entries.length > 0 && entries.every((entry) => entry.issue === null)) {
     fields.push({ name: "Note", value: escape(issueNote) });
   }
 

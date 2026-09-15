@@ -114,6 +114,15 @@ export const REQUIREMENTS: Requirement[] = [
     purpose: "Model id passed to the Cursor SDK",
     howToGet: "Defaults to claude-opus-5",
   },
+  {
+    name: "DOCS_LLMS_FULL_TXT",
+    need: "optional",
+    home: "actions-variable",
+    purpose: "One-off seed for an empty docs corpus, read once and then ignored",
+    howToGet:
+      "Only set this to fill a fresh corpus in one request instead of over several runs, e.g. https://docs.railway.com/llms-full.txt",
+    without: "the corpus fills a page at a time, a few runs before it is complete",
+  },
 ];
 
 export interface EnvReport {
