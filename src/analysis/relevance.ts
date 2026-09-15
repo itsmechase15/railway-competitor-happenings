@@ -2,7 +2,7 @@ import { COMPETITORS } from "../config.js";
 import { isMarketingTarget } from "../railway/pages.js";
 import { matchCapabilities, matchProducts } from "../railway/products.js";
 import type { Analysis, RecommendedAction, StoredItem } from "../types.js";
-import { firstSentence } from "../util/text.js";
+import { firstSentence, stem, WORD_PATTERN } from "../util/text.js";
 
 /**
  * Is a page edit about the thing that shipped?
@@ -18,7 +18,7 @@ import { firstSentence } from "../util/text.js";
  * with the surface it changed in taken out.
  */
 
-const WORD = /[a-z0-9]+/g;
+const WORD = WORD_PATTERN;
 
 /**
  * Words that appear in every competitor alert, so they discriminate nothing.
@@ -47,27 +47,6 @@ const STOPWORDS = new Set(
     (word) => stem(word.toLowerCase()),
   ),
 );
-
-/**
- * Fold a word to a stem crude enough to be predictable: cache, caches, cached,
- * and caching all have to land on the same token, and scaling has to land on
- * scale. Plurals go first, so plans and plan meet rather than parting.
- */
-export function stem(word: string): string {
-  let stemmed = singular(word);
-  if (stemmed.length > 4 && stemmed.endsWith("ing")) stemmed = stemmed.slice(0, -3);
-  else if (stemmed.length > 4 && stemmed.endsWith("ed")) stemmed = stemmed.slice(0, -2);
-  if (stemmed.length > 4 && stemmed.endsWith("e")) stemmed = stemmed.slice(0, -1);
-  // "shipping" and "shipped" lose a doubled consonant that "ship" never had.
-  return stemmed.replace(/([bdgklmnprt])\1$/, "$1");
-}
-
-function singular(word: string): string {
-  if (word.length > 4 && word.endsWith("ies")) return `${word.slice(0, -3)}y`;
-  if (word.length > 4 && /(?:ss|s|x|z|ch|sh)es$/.test(word)) return word.slice(0, -2);
-  if (word.length > 3 && word.endsWith("s") && !word.endsWith("ss")) return word.slice(0, -1);
-  return word;
-}
 
 /** Text as a space-padded run of stems, so a term can be matched whole. */
 function stemmed(text: string): string {

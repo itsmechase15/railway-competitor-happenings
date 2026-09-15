@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { enforceActionLead } from "../src/analysis/lead.js";
 import { enforceUpdatePagesTopic } from "../src/analysis/relevance.js";
-import { extractJsonObject, parseAnalysis } from "../src/analysis/schema.js";
+import {
+  extractJsonObject,
+  parseAnalysis,
+  UNSTATED_NO_ACTION_REASON,
+} from "../src/analysis/schema.js";
 import { claimsGap, verifyAgainstDocs } from "../src/analysis/verify.js";
 import type { RailwayDoc } from "../src/types.js";
 import { analysis, storedItem } from "./helpers.js";
@@ -50,10 +54,93 @@ describe("reading a model reply", () => {
     expect(verdict.actions[0]?.feature).toBeUndefined();
   });
 
-  it("refuses a reply with no action, because a model always has to name one", () => {
+  it("reads an empty actions list as an answer, and keeps the reason given for it", () => {
+    const verdict = parseAnalysis(
+      JSON.stringify({
+        impact: "minor",
+        summary: "Render wrote a post about their new office.",
+        actions: [],
+        no_action_reason: "This ships nothing, so there is nothing for Railway to answer.",
+      }),
+    );
+
+    expect(verdict.actions).toEqual([]);
+    expect(verdict.noActionReason).toBe(
+      "This ships nothing, so there is nothing for Railway to answer.",
+    );
+  });
+
+  it("says so when a reply recommends nothing and does not say why", () => {
+    const verdict = parseAnalysis(
+      JSON.stringify({ impact: "minor", summary: "Render wrote a post.", actions: [] }),
+    );
+    expect(verdict.noActionReason).toBe(UNSTATED_NO_ACTION_REASON);
+  });
+
+  it("refuses a reply that never answered the actions field at all", () => {
     expect(() =>
-      parseAnalysis(JSON.stringify({ impact: "minor", summary: "Render wrote a post.", actions: [] })),
-    ).toThrow(/missing an action/);
+      parseAnalysis(JSON.stringify({ impact: "minor", summary: "Render wrote a post." })),
+    ).toThrow(/missing its actions list/);
+  });
+
+  it("keeps a product action's gap, evidence page, and quote", () => {
+    const verdict = parseAnalysis(
+      JSON.stringify({
+        impact: "major",
+        summary: "Render shipped object storage.",
+        actions: [
+          {
+            type: "consider_building",
+            detail: "Add an S3-compatible bucket product.",
+            gap: "no object storage product",
+            evidence_url: "https://docs.railway.com/volumes",
+            evidence_quote: "Volumes attach a persistent disk to one service.",
+          },
+        ],
+      }),
+    );
+
+    const [action] = verdict.actions;
+    expect(action?.gap).toBe("no object storage product");
+    expect(action?.evidenceUrl).toBe("https://docs.railway.com/volumes");
+    expect(action?.evidenceQuote).toBe("Volumes attach a persistent disk to one service.");
+  });
+
+  it("leaves a quote's own punctuation alone, because it is matched character for character", () => {
+    const verdict = parseAnalysis(
+      JSON.stringify({
+        impact: "notable",
+        summary: "Render raised a limit.",
+        actions: [
+          {
+            type: "consider_enhancing",
+            feature: "Scaling",
+            detail: "Raise the ceiling on vertical scaling.",
+            gap: "no plan above 32 GB",
+            evidence_url: "https://docs.railway.com/deployments/scaling",
+            evidence_quote: "Services scale vertically—up to 32 GB of memory.",
+          },
+        ],
+      }),
+    );
+
+    expect(verdict.actions[0]?.evidenceQuote).toContain("—");
+  });
+
+  it("caps a reply at three actions, which is what the embed can show", () => {
+    const verdict = parseAnalysis(
+      JSON.stringify({
+        impact: "major",
+        summary: "Render shipped four things at once.",
+        actions: [
+          { type: "update_pages", detail: "One." },
+          { type: "update_pages", detail: "Two." },
+          { type: "update_pages", detail: "Three." },
+          { type: "update_pages", detail: "Four." },
+        ],
+      }),
+    );
+    expect(verdict.actions).toHaveLength(3);
   });
 
   it("rewrites an em dash a model slipped in", () => {

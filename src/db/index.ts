@@ -106,16 +106,24 @@ class UnreachableDatabaseFallback implements Store {
     return this.attempt((store) => store.getUnpostedAnalyses(...args));
   }
 
-  getIndexedPageUrls() {
-    return this.attempt((store) => store.getIndexedPageUrls());
+  listPageMeta() {
+    return this.attempt((store) => store.listPageMeta());
+  }
+
+  loadCorpus(...args: Parameters<Store["loadCorpus"]>) {
+    return this.attempt((store) => store.loadCorpus(...args));
   }
 
   getPages(...args: Parameters<Store["getPages"]>) {
     return this.attempt((store) => store.getPages(...args));
   }
 
-  upsertPage(...args: Parameters<Store["upsertPage"]>) {
-    return this.attempt((store) => store.upsertPage(...args));
+  savePage(...args: Parameters<Store["savePage"]>) {
+    return this.attempt((store) => store.savePage(...args));
+  }
+
+  recordCorpusRun(...args: Parameters<Store["recordCorpusRun"]>) {
+    return this.attempt((store) => store.recordCorpusRun(...args));
   }
 
   replaceClaimsForUrl(...args: Parameters<Store["replaceClaimsForUrl"]>) {
@@ -178,15 +186,24 @@ class ReadOnlyStore implements Store {
     return this.inner.getUnpostedAnalyses(...args);
   }
 
-  getIndexedPageUrls() {
-    return this.inner.getIndexedPageUrls();
+  listPageMeta() {
+    return this.inner.listPageMeta();
+  }
+
+  loadCorpus(...args: Parameters<Store["loadCorpus"]>) {
+    return this.inner.loadCorpus(...args);
   }
 
   getPages(...args: Parameters<Store["getPages"]>) {
     return this.inner.getPages(...args);
   }
 
-  async upsertPage() {
+  async savePage() {
+    // No-op in dry run. The refresh hands its own fetches back to the run, so
+    // a dry run still reasons against the pages it read.
+  }
+
+  async recordCorpusRun() {
     // No-op in dry run.
   }
 

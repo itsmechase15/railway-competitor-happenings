@@ -80,6 +80,13 @@ export const DEFAULT_GITHUB_REPO = "itsmechase15/railway-competitor-happenings";
  * takes the hash through `{encodedUrl}`: an unencoded `#` never leaves the
  * client. thum.io has no daily quota, so it stays behind it.
  */
+/**
+ * Where the corpus is discovered from. The docs sitemap is the vendor's own
+ * list of its pages, which is the closest thing to an authoritative one – and
+ * still only one input, because a sitemap lags a launch.
+ */
+export const DEFAULT_DOCS_SITEMAPS = ["https://docs.railway.com/sitemap.xml"];
+
 export const DEFAULT_SCREENSHOT_URL_TEMPLATES = [
   "https://api.microlink.io/?url={encodedUrl}&screenshot=true&meta=false&embed=screenshot.url",
   "https://image.thum.io/get/width/1200/crop/900/noanimate/{url}",
@@ -117,10 +124,36 @@ export interface Config {
   maxItemsPerSource: number;
   /** Cap on Railway pages fetched in one run. */
   railwayMaxPages: number;
-  /** Re-fetch an indexed Railway page once it is this old. */
+  /**
+   * Re-fetch a corpus page this long after it was last read, when nothing has
+   * reasoned against it lately. The cold tier.
+   */
   railwayRefreshDays: number;
-  /** Skip the Railway index refresh entirely (useful for fast local runs). */
+  /**
+   * The same, for a page an analyst has read recently. Those are the pages
+   * recommendations rest on, so they are kept closer to current.
+   */
+  docsHotRefreshDays: number;
+  /** Skip the Railway corpus refresh entirely (useful for fast local runs). */
   skipRailwayIndex: boolean;
+  /** Sitemaps discovery reads, filtered to Railway docs and marketing pages. */
+  docsSitemaps: string[];
+  /** One discovery input among several, never the corpus itself. Unset skips it. */
+  docsLlmsTxt: string | undefined;
+  /**
+   * A single file carrying every docs page's body, used once to seed an empty
+   * corpus and never read again. Unset means the first runs fill the corpus a
+   * page at a time instead.
+   */
+  docsLlmsFullTxt: string | undefined;
+  /** Railway's own changelog index. Its entries are evidence that something shipped. */
+  railwayChangelogIndex: string | undefined;
+  /** Where the per-run markdown copy of the corpus is written for the analyst to search. */
+  docsWorkspaceDir: string;
+  /** How many corpus excerpts are pre-loaded into the prompt as a starting point. */
+  retrievalTopK: number;
+  /** Excerpts allowed from any one docs section, so one area cannot fill the prompt. */
+  retrievalPerSection: number;
   /**
    * Analyze a competitor+source pair's backlog on the very first run instead of
    * recording it silently. Dry runs only – it exists so you can preview a real
@@ -191,9 +224,21 @@ export function loadConfig(): Config {
     lookbackDays: int("LOOKBACK_DAYS", 7),
     maxItemsPerRun: int("MAX_ITEMS_PER_RUN", 12),
     maxItemsPerSource: int("MAX_ITEMS_PER_SOURCE", 8),
-    railwayMaxPages: int("RAILWAY_MAX_PAGES", 40),
+    // Railway publishes a few hundred docs pages and reading all of them takes
+    // under twenty seconds, so the first run builds the whole corpus rather
+    // than a quarter of it. The coverage gate is only as good as the corpus
+    // behind it, and a partial corpus blocks honest actions and misses others.
+    railwayMaxPages: int("RAILWAY_MAX_PAGES", 600),
     railwayRefreshDays: int("RAILWAY_REFRESH_DAYS", 14),
+    docsHotRefreshDays: int("DOCS_HOT_REFRESH_DAYS", 3),
     skipRailwayIndex: bool("SKIP_RAILWAY_INDEX", false),
+    docsSitemaps: list("DOCS_SITEMAPS") ?? DEFAULT_DOCS_SITEMAPS,
+    docsLlmsTxt: str("DOCS_LLMS_TXT") ?? "https://docs.railway.com/llms.txt",
+    docsLlmsFullTxt: str("DOCS_LLMS_FULL_TXT"),
+    railwayChangelogIndex: str("RAILWAY_CHANGELOG_INDEX") ?? "https://railway.com/changelog",
+    docsWorkspaceDir: str("DOCS_WORKSPACE_DIR") ?? ".docs-workspace",
+    retrievalTopK: int("RETRIEVAL_TOP_K", 10),
+    retrievalPerSection: int("RETRIEVAL_PER_SECTION", 4),
     httpTimeoutMs: int("HTTP_TIMEOUT_MS", 20_000),
     userAgent:
       str("USER_AGENT") ??

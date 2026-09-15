@@ -57,19 +57,24 @@ describe("the heuristic that runs without a model", () => {
     );
   });
 
-  it("never invents a Railway product fact: its only action is a page check", () => {
+  /**
+   * The heuristic knows no Railway product facts, so it recommends nothing at
+   * all. It cannot claim a gap without a docs page it has not read, and it
+   * cannot ask for a page edit without establishing that something on the page
+   * is wrong. Saying "nobody assessed this" is the whole of what it knows.
+   */
+  it("never invents a Railway product fact: it recommends nothing and says why", () => {
     const verdict = heuristicAnalysis(storedItem(), [], []);
-    expect(verdict.actions).toHaveLength(1);
-    expect(verdict.actions[0]?.type).toBe("update_pages");
-    expect(verdict.actions[0]?.detail).toContain("No model analysis ran");
+    expect(verdict.actions).toEqual([]);
+    expect(verdict.noActionReason).toContain("No model analysis ran");
   });
 
   it("sends the reader to this competitor's own compare page, not the other one", () => {
     const vercel = heuristicAnalysis(storedItem({ competitor: "vercel" }), [], []);
-    expect(vercel.actions[0]?.detail).toContain(
+    expect(vercel.openQuestions[0]).toContain(
       "https://docs.railway.com/platform/compare-to-vercel",
     );
-    expect(vercel.actions[0]?.detail).not.toContain("compare-to-render");
+    expect(vercel.openQuestions.join(" ")).not.toContain("compare-to-render");
   });
 
   it("prefers a page we have actually indexed a claim from", () => {
@@ -81,8 +86,21 @@ describe("the heuristic that runs without a model", () => {
         heading: "Services",
       },
     ]);
-    expect(verdict.actions[0]?.detail).toContain(
+    expect(verdict.openQuestions[0]).toContain(
       "https://docs.railway.com/platform/migrate-from-render",
+    );
+  });
+
+  it("points at the closest corpus page without calling it a gap", () => {
+    const verdict = heuristicAnalysis(storedItem(), [], [
+      {
+        url: "https://docs.railway.com/deployments/scaling",
+        title: "Scaling",
+        excerpt: "Railway scales services vertically and horizontally.",
+      },
+    ]);
+    expect(verdict.openQuestions.join(" ")).toContain(
+      "https://docs.railway.com/deployments/scaling",
     );
   });
 });

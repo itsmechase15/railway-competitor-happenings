@@ -4,14 +4,64 @@ import { createLogger } from "../log.js";
 import type {
   CandidateItem,
   CompetitorId,
+  DiscoverySource,
+  PageKind,
+  PageMeta,
   RailwayClaim,
   RailwayPage,
   SourceId,
   StoredItem,
 } from "../types.js";
-import { itemKey, type PendingPost, type RecordAnalysisInput, type Store } from "./store.js";
+import {
+  itemKey,
+  type CorpusBookkeeping,
+  type PendingPost,
+  type RecordAnalysisInput,
+  type Store,
+} from "./store.js";
 
 const log = createLogger("db");
+
+const PAGE_COLUMNS = `url, title, text, mentions, kind, content_hash, fetched_at,
+              changed_at, discovered_from, missing_streak, last_used_at, retired_at`;
+
+interface PageRow {
+  url: string;
+  title: string | null;
+  text: string | null;
+  mentions: CompetitorId[] | null;
+  kind: string | null;
+  content_hash: string | null;
+  fetched_at: Date | null;
+  changed_at: Date | null;
+  discovered_from: string[] | null;
+  missing_streak: number | null;
+  last_used_at: Date | null;
+  retired_at: Date | null;
+}
+
+/**
+ * A corpus row as the rest of the app reads it. Every column added by
+ * migration 003 has a default, so a row written before it applied reads as a
+ * docs page with no known hash, which is what makes the next run re-read it.
+ */
+function toPage(row: PageRow): RailwayPage {
+  const fetchedAt = row.fetched_at ?? new Date(0);
+  return {
+    url: row.url,
+    title: row.title ?? "",
+    text: row.text ?? "",
+    mentions: row.mentions ?? [],
+    kind: (row.kind ?? "docs") as PageKind,
+    contentHash: row.content_hash ?? "",
+    fetchedAt,
+    changedAt: row.changed_at ?? fetchedAt,
+    discoveredFrom: (row.discovered_from ?? []) as DiscoverySource[],
+    missingStreak: row.missing_streak ?? 0,
+    lastUsedAt: row.last_used_at,
+    retiredAt: row.retired_at,
+  };
+}
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]", ""]);
 
@@ -260,51 +310,115 @@ export class PostgresStore implements Store {
     return pending;
   }
 
-  async getIndexedPageUrls(): Promise<Map<string, Date>> {
-    const result = await this.pool.query<{ url: string; fetched_at: Date | null }>(
-      "SELECT url, fetched_at FROM pages",
+  async listPageMeta(): Promise<PageMeta[]> {
+    const result = await this.pool.query<PageRow>(
+      `SELECT url, title, '' AS text, '{}'::text[] AS mentions, kind, content_hash,
+              fetched_at, changed_at, discovered_from, missing_streak, last_used_at, retired_at
+       FROM pages`,
     );
-    const map = new Map<string, Date>();
-    for (const row of result.rows) {
-      map.set(row.url, row.fetched_at ?? new Date(0));
-    }
-    return map;
+    return result.rows.map((row) => {
+      const { text: _text, mentions: _mentions, ...meta } = toPage(row);
+      return meta;
+    });
+  }
+
+  async loadCorpus(kinds?: PageKind[]): Promise<RailwayPage[]> {
+    const result = await this.pool.query<PageRow>(
+      `SELECT ${PAGE_COLUMNS}
+       FROM pages
+       WHERE retired_at IS NULL
+         AND ($1::text[] IS NULL OR kind = ANY($1::text[]))
+       ORDER BY url`,
+      [kinds ?? null],
+    );
+    return result.rows.map(toPage);
   }
 
   async getPages(urls: string[]): Promise<RailwayPage[]> {
     if (urls.length === 0) return [];
-    const result = await this.pool.query<{
-      url: string;
-      title: string;
-      text: string;
-      mentions: CompetitorId[] | null;
-      fetched_at: Date | null;
-    }>(
-      `SELECT url, title, text, mentions, fetched_at
+    const result = await this.pool.query<PageRow>(
+      `SELECT ${PAGE_COLUMNS}
        FROM pages
        WHERE url = ANY($1::text[])`,
       [urls],
     );
-    return result.rows.map((row) => ({
-      url: row.url,
-      title: row.title,
-      text: row.text,
-      mentions: row.mentions ?? [],
-      fetchedAt: row.fetched_at ?? new Date(0),
-    }));
+    return result.rows.map(toPage);
   }
 
-  async upsertPage(page: RailwayPage): Promise<void> {
+  /**
+   * `retired_at` is cleared on purpose: a page we are writing a body for is
+   * back, whatever a past run concluded about it.
+   */
+  async savePage(page: RailwayPage): Promise<void> {
     await this.pool.query(
-      `INSERT INTO pages (url, title, text, mentions, fetched_at)
-       VALUES ($1, $2, $3, $4::text[], $5)
+      `INSERT INTO pages (url, title, text, mentions, kind, content_hash, fetched_at,
+                          changed_at, discovered_from, missing_streak, last_used_at, retired_at)
+       VALUES ($1, $2, $3, $4::text[], $5, $6, $7, $8, $9::text[], $10, $11, NULL)
        ON CONFLICT (url) DO UPDATE
          SET title = EXCLUDED.title,
              text = EXCLUDED.text,
              mentions = EXCLUDED.mentions,
-             fetched_at = EXCLUDED.fetched_at`,
-      [page.url, page.title, page.text, page.mentions, page.fetchedAt],
+             kind = EXCLUDED.kind,
+             content_hash = EXCLUDED.content_hash,
+             fetched_at = EXCLUDED.fetched_at,
+             changed_at = EXCLUDED.changed_at,
+             discovered_from = EXCLUDED.discovered_from,
+             missing_streak = EXCLUDED.missing_streak,
+             last_used_at = coalesce(EXCLUDED.last_used_at, pages.last_used_at),
+             retired_at = NULL`,
+      [
+        page.url,
+        page.title,
+        page.text,
+        page.mentions,
+        page.kind,
+        page.contentHash,
+        page.fetchedAt,
+        page.changedAt,
+        page.discoveredFrom,
+        page.missingStreak,
+        page.lastUsedAt,
+      ],
     );
+  }
+
+  async recordCorpusRun(update: CorpusBookkeeping): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      for (const record of update.seen) {
+        await client.query(
+          "UPDATE pages SET missing_streak = 0, discovered_from = $2::text[] WHERE url = $1",
+          [record.url, record.sources],
+        );
+      }
+      if (update.missing.length > 0) {
+        await client.query(
+          "UPDATE pages SET missing_streak = missing_streak + 1, discovered_from = '{}' WHERE url = ANY($1::text[])",
+          [update.missing],
+        );
+      }
+      if (update.retired.length > 0) {
+        await client.query(
+          "UPDATE pages SET retired_at = $2 WHERE url = ANY($1::text[]) AND retired_at IS NULL",
+          [update.retired, update.at],
+        );
+      }
+      if (update.used.length > 0) {
+        await client.query("UPDATE pages SET last_used_at = $2 WHERE url = ANY($1::text[])", [
+          update.used,
+          update.at,
+        ]);
+      }
+
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async replaceClaimsForUrl(url: string, claims: RailwayClaim[]): Promise<void> {

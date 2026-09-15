@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   CANONICAL_DOC_URLS,
+  CATALOG_OVERVIEW_URLS,
   docUrlsForText,
   findProductByName,
   findRailwayProduct,
+  isCatalogOverviewUrl,
   matchCapabilities,
   matchProducts,
   productForDocUrl,
@@ -91,6 +93,68 @@ describe("the Railway docs catalog", () => {
 
   it("maps an overview page back to the surface that owns it", () => {
     expect(productForDocUrl("https://docs.railway.com/networking/cdn")?.label).toBe("CDN");
+  });
+
+  it("names one overview page per surface and capability, which retrieval ranks up", () => {
+    expect(CATALOG_OVERVIEW_URLS.length).toBeLessThanOrEqual(
+      RAILWAY_PRODUCTS.length + RAILWAY_CAPABILITIES.length,
+    );
+    for (const product of RAILWAY_PRODUCTS) {
+      expect(CATALOG_OVERVIEW_URLS, product.label).toContain(product.docs[0]);
+      expect(isCatalogOverviewUrl(product.docs[0] as string), product.label).toBe(true);
+    }
+  });
+
+  it("does not treat a deeper page as an overview page", () => {
+    expect(isCatalogOverviewUrl("https://docs.railway.com/guides/cache-headers-cdn")).toBe(false);
+  });
+});
+
+/**
+ * Keywords route a signal at a surface and boost that surface's overview page.
+ * A short one matched as a substring routes half the feed at the wrong place:
+ * "log" is in every blog, "ram" in every program, "port" in every support
+ * page, and "cli" in every client.
+ */
+describe("keeping short keywords from matching inside other words", () => {
+  it("does not read a blog post as a logging signal", () => {
+    const labels = matchProducts("Render's blog: what we shipped this quarter", 5).map(
+      (product) => product.label,
+    );
+    expect(labels).not.toContain("Observability");
+  });
+
+  it("does not read a program or a support page as memory or networking", () => {
+    const labels = matchProducts(
+      "A programmatic way to reach our support portal, important for every client",
+      5,
+    ).map((product) => product.label);
+
+    expect(labels).not.toContain("Scaling");
+    expect(labels).not.toContain("Public networking");
+    expect(labels).not.toContain("CLI");
+  });
+
+  it("still matches the word itself", () => {
+    expect(matchProducts("Stream logs to a drain", 3).map((p) => p.label)).toContain(
+      "Observability",
+    );
+  });
+
+  /**
+   * A compute plan is a scaling launch, not a pricing one. "Plan" and "cost"
+   * are words every post uses, so Pricing no longer claims them.
+   */
+  it("reads a new compute plan as scaling rather than as pricing", () => {
+    const labels = matchProducts("Render added a memory-optimized compute plan", 3).map(
+      (product) => product.label,
+    );
+    expect(labels[0]).toBe("Scaling");
+    expect(labels).not.toContain("Pricing");
+  });
+
+  it("still reads an actual pricing post as pricing", () => {
+    expect(matchProducts("New Render pricing, with a free tier", 3)[0]?.label).toBe("Pricing");
   });
 });
 

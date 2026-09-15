@@ -60,6 +60,8 @@ const impactToken = z.enum(IMPACTS);
 const actionToken = z.enum(ACTIONS);
 const detail = optionalText(900);
 const feature = optionalText(120);
+const gap = optionalText(400);
+const quote = optionalText(600);
 
 /** One entry of `actions`, in whichever casing the model reached for. */
 const actionSchema = z.object({
@@ -71,6 +73,12 @@ const actionSchema = z.object({
   feature,
   railway_feature: feature,
   railwayFeature: feature,
+  gap,
+  gap_today: gap,
+  evidence_url: optionalText(500),
+  evidenceUrl: optionalText(500),
+  evidence_quote: quote,
+  evidenceQuote: quote,
 });
 
 export const analysisSchema = z.object({
@@ -79,11 +87,29 @@ export const analysisSchema = z.object({
   key_points: lines.optional(),
   keyPoints: lines.optional(),
   actions: z.array(actionSchema).max(4).optional(),
+  no_action_reason: optionalText(600),
+  noActionReason: optionalText(600),
   railway_refs: refs.optional(),
   railwayRefs: refs.optional(),
   open_questions: lines.optional(),
   openQuestions: lines.optional(),
+  pages_read: lines.optional(),
+  pagesRead: lines.optional(),
 });
+
+/**
+ * Zero to three. The cap is the embed's: a fourth action would not render, and
+ * an alert asking for four things is an alert nobody starts.
+ */
+export const MAX_ACTIONS = 3;
+
+/**
+ * Said when an analyst recommends nothing and does not say why. Zero actions
+ * is a normal answer, so this is not a failure – but it is not an answer
+ * either, and the alert says so rather than going out blank.
+ */
+export const UNSTATED_NO_ACTION_REASON =
+  "The analysis recommended nothing and did not say why, so nothing here has been ruled out.";
 
 /** Every string a model wrote is punctuated our way before anything renders it. */
 function clean(value: string): string {
@@ -97,53 +123,55 @@ function toAction(parsed: z.infer<typeof actionSchema>): RecommendedAction | nul
   if (!type || !actionDetail) return null;
 
   const named = parsed.feature ?? parsed.railway_feature ?? parsed.railwayFeature;
+  const namedGap = parsed.gap ?? parsed.gap_today;
+  const evidenceUrl = parsed.evidence_url ?? parsed.evidenceUrl;
+  const evidenceQuote = parsed.evidence_quote ?? parsed.evidenceQuote;
+
   return {
     type,
     detail: clean(actionDetail),
     ...(named ? { feature: clean(named) } : {}),
+    ...(namedGap ? { gap: clean(namedGap) } : {}),
+    ...(evidenceUrl ? { evidenceUrl: evidenceUrl.trim() } : {}),
+    // Not punctuation-corrected: a quote is checked character by character
+    // against the stored page, and rewriting its dashes would fail that check.
+    ...(evidenceQuote ? { evidenceQuote: evidenceQuote.trim() } : {}),
   };
 }
 
-export interface ReadOptions {
-  /**
-   * Read an actions list that is empty as empty, rather than as a broken
-   * reply. A stored alert can genuinely have no action: the relevance guard
-   * drops a page edit that was not about the launch, and sometimes that was
-   * the only thing the model asked for. A model reply still has to name one.
-   */
-  allowNoAction?: boolean;
-}
-
-function readActions(
-  parsed: z.infer<typeof analysisSchema>,
-  options: ReadOptions,
-): RecommendedAction[] {
+function readActions(parsed: z.infer<typeof analysisSchema>): RecommendedAction[] {
   const listed = (parsed.actions ?? [])
     .map(toAction)
     .filter((action): action is RecommendedAction => action !== null);
-  if (listed.length > 0) return listed;
-  if (options.allowNoAction && Array.isArray(parsed.actions)) return [];
-  throw new Error("analysis is missing an action with a detail");
+  if (listed.length > 0) return listed.slice(0, MAX_ACTIONS);
+  // An empty list is an answer: plenty of launches ask nothing of Railway.
+  // Nothing at all under `actions` is a reply that did not answer the field,
+  // and only the reason it gives makes the difference readable.
+  if (Array.isArray(parsed.actions)) return [];
+  if (parsed.no_action_reason ?? parsed.noActionReason) return [];
+  throw new Error("analysis is missing its actions list");
 }
 
 /** Models drift between snake_case and camelCase; accept both and normalize. */
-export function normalizeAnalysis(
-  parsed: z.infer<typeof analysisSchema>,
-  options: ReadOptions = {},
-): Analysis {
-  const actions = readActions(parsed, options);
+export function normalizeAnalysis(parsed: z.infer<typeof analysisSchema>): Analysis {
+  const actions = readActions(parsed);
 
   if (!parsed.impact) throw new Error("analysis is missing impact");
 
   const cited = parsed.railway_refs ?? parsed.railwayRefs ?? [];
   const keyPoints = parsed.key_points ?? parsed.keyPoints ?? [];
   const openQuestions = parsed.open_questions ?? parsed.openQuestions ?? [];
+  const pagesRead = parsed.pages_read ?? parsed.pagesRead ?? [];
+  const stated = parsed.no_action_reason ?? parsed.noActionReason;
+  const noActionReason =
+    actions.length > 0 ? undefined : clean(stated ?? UNSTATED_NO_ACTION_REASON);
 
   return {
     impact: parsed.impact,
     summary: clean(parsed.summary),
     keyPoints: keyPoints.map(clean).filter(Boolean),
     actions,
+    ...(noActionReason ? { noActionReason } : {}),
     railwayRefs: cited.map((ref) => {
       const suggestedEdit = ref.suggested_edit ?? ref.suggestedEdit;
       return {
@@ -153,6 +181,7 @@ export function normalizeAnalysis(
       };
     }),
     openQuestions: openQuestions.map(clean).filter(Boolean),
+    ...(pagesRead.length > 0 ? { pagesRead: pagesRead.map((url) => url.trim()) } : {}),
   };
 }
 
@@ -170,7 +199,7 @@ const issueSchema = z.object({
 /** One action's issue, stored in the same order as `actions`. */
 const actionIssueSchema = z.object({
   type: actionToken.optional(),
-  feature: feature.optional(),
+  feature,
   issue: issueSchema.optional().nullable(),
 });
 
@@ -204,7 +233,7 @@ function readActionIssues(
 
 export function parseStoredAlert(raw: unknown): StoredAlertPayload {
   const parsed = alertPayloadSchema.parse(raw);
-  const analysis = normalizeAnalysis(parsed, { allowNoAction: true });
+  const analysis = normalizeAnalysis(parsed);
   return {
     analysis,
     image: parsed.image ?? null,

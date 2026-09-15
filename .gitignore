@@ -1,5 +1,8 @@
 node_modules/
 dist/
+# The per-run markdown copy of Railway's docs the analyst searches. Rebuilt
+# from the `pages` table every run, so there is nothing here worth committing.
+.docs-workspace/
 .env
 .env.local
 *.log

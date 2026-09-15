@@ -10,6 +10,7 @@ import {
   enforceEmbedLimits,
   IMPACT_HEADING,
   KNOW_HEADING,
+  NO_ACTION_TITLE,
 } from "../src/discord/embed.js";
 import { IMPACT_COLOR } from "../src/labels.js";
 import { alert, analysis, issuesFor, storedItem } from "./helpers.js";
@@ -147,6 +148,59 @@ describe("the Discord embed", () => {
       (field) => field.name === ACTION_HEADING || field.name === BLANK_FIELD_NAME,
     );
     expect(actionFields).toHaveLength(3);
+  });
+
+  /**
+   * Zero actions is a normal answer, and the embed has to say so in words. A
+   * launch that asks nothing of Railway is worth knowing about, and a blank
+   * space where the actions go reads as an alert that broke halfway through.
+   */
+  it("says None, with the reason, when there is nothing to do", () => {
+    const verdict = analysis({
+      actions: [],
+      noActionReason: "Railway already scales memory on every plan, so there is nothing to do.",
+    });
+    const embed = buildDiscordEmbed(alert({ analysis: verdict, issues: [] }));
+    const action = embed.fields.find((field) => field.name === ACTION_HEADING);
+
+    expect(action?.value).toBe(
+      `**${NO_ACTION_TITLE}**\nRailway already scales memory on every plan, so there is nothing to do.`,
+    );
+  });
+
+  it("still says None when nothing recorded a reason", () => {
+    const embed = buildDiscordEmbed(
+      alert({ analysis: analysis({ actions: [] }), issues: [] }),
+    );
+    const action = embed.fields.find((field) => field.name === ACTION_HEADING);
+    expect(action?.value.startsWith(`**${NO_ACTION_TITLE}**`)).toBe(true);
+  });
+
+  /**
+   * `[].every(...)` is true, so an alert with no actions used to carry a note
+   * apologizing for the issue links it never asked for.
+   */
+  it("does not apologize for missing issue links on an alert that asked for none", () => {
+    const embed = buildDiscordEmbed(
+      alert({
+        analysis: analysis({ actions: [], noActionReason: "Nothing to do." }),
+        issues: [],
+        issueNote: "GitHub issues not created – dry run",
+      }),
+    );
+    expect(embed.fields.map((field) => field.name)).not.toContain("Note");
+  });
+
+  it("still explains missing issue links when there were actions to file", () => {
+    const verdict = analysis();
+    const embed = buildDiscordEmbed(
+      alert({
+        analysis: verdict,
+        issues: issuesFor(verdict.actions, [null]),
+        issueNote: "GitHub issues not created – dry run",
+      }),
+    );
+    expect(embed.fields.find((field) => field.name === "Note")?.value).toContain("dry run");
   });
 
   it("carries the feature image, and always one", () => {

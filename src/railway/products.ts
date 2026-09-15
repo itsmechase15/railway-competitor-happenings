@@ -4,17 +4,28 @@ import type { RecommendedAction } from "../types.js";
  * A Railway product surface: what to call it, the words that point at it, and
  * the docs pages that say what it can already do.
  *
- * The docs are why this list is more than a link table. A compare page is
- * marketing copy written on some past date, so it is the wrong evidence for
- * "Railway can't do X". Before the bot recommends building or enhancing
- * anything, the docs for the surface it names go in front of the model.
+ * This catalog is a route into the docs, not the boundary of them. The corpus
+ * in the `pages` table is what Railway documents – discovered from the
+ * sitemap, from `llms.txt`, and from the links pages carry – and this list
+ * does three jobs on top of it:
  *
- * `docs` is deliberately short. The first entry is the surface's overview
- * page, and the ones after it answer the questions Render and Vercel keep
- * shipping against. Every URL here has been requested and returned 200.
+ * 1. **Naming.** A model writes "scale to zero"; an issue has to say
+ *    "Serverless", in Railway's own casing, with a label a filter can query.
+ * 2. **Routing.** An action names a surface, and the surface names the pages a
+ *    correction should cite.
+ * 3. **Boosting.** Retrieval ranks the whole corpus, and an overview page is
+ *    worth more than a guide that mentions the same words in passing.
  *
- * A surface missing from here is a recommendation with nothing to check it
- * against, and that is how "Railway has no CDN" gets shipped.
+ * What it no longer does is decide which pages exist. A surface missing from
+ * here used to mean a recommendation with nothing to check it against; now it
+ * means a recommendation nobody gave a nickname, and the coverage gate still
+ * reads the docs for it.
+ *
+ * `docs` stays short: the first entry is the surface's overview page, and the
+ * ones after it answer the questions Render and Vercel keep shipping against.
+ * Every URL here has been requested and returned 200. Keywords stay short too
+ * – they route and boost, so a long tail of common words costs accuracy
+ * instead of buying reach.
  */
 export interface RailwayProduct {
   /** Railway's own casing, which is sentence case: "Static outbound IPs". */
@@ -115,7 +126,6 @@ export const RAILWAY_PRODUCTS: RailwayProduct[] = [
       "cpu",
       "vcpu",
       "memory",
-      "ram",
     ],
     docs: [
       "https://docs.railway.com/deployments/scaling",
@@ -379,18 +389,19 @@ export const RAILWAY_PRODUCTS: RailwayProduct[] = [
     label: "Pricing",
     kind: "platform",
     aliases: ["plans", "billing", "cost", "usage-based pricing"],
+    // No bare "plan", "cost", or "bill". A compute plan is a scaling launch
+    // and a cost is anything with a number on it, so those three words routed
+    // half the feed at Railway's pricing page.
     keywords: [
       "pricing",
       "price",
-      "plan",
       "billing",
-      "bill",
-      "cost",
       "free tier",
       "usage-based",
-      "credit",
       "committed spend",
-      "seat",
+      "cost control",
+      "invoice",
+      "per-seat",
     ],
     docs: [
       "https://docs.railway.com/pricing",
@@ -417,7 +428,6 @@ export const RAILWAY_PRODUCTS: RailwayProduct[] = [
       "rbac",
       "access group",
       "guardrail",
-      "permission",
     ],
     docs: [
       "https://docs.railway.com/enterprise",
@@ -568,9 +578,9 @@ export const RAILWAY_CAPABILITIES: RailwayCapability[] = [
 ];
 
 /**
- * Every canonical docs URL, deduplicated. This is the whole set the indexer is
- * asked to keep fresh: a bounded, hand-listed catalog, not a crawl of
- * docs.railway.com.
+ * Every docs URL the catalog names, deduplicated. These are pinned into the
+ * corpus: a surface the bot routes to has to have its pages, whatever a
+ * sitemap happens to list this week.
  */
 export const CANONICAL_DOC_URLS: string[] = [
   ...new Set([
@@ -578,6 +588,27 @@ export const CANONICAL_DOC_URLS: string[] = [
     ...RAILWAY_CAPABILITIES.flatMap((capability) => capability.docs),
   ]),
 ];
+
+/**
+ * The overview page of every surface and capability: one page per thing the
+ * catalog can name. Retrieval boosts these, because a surface's own overview
+ * answers "does Railway do this at all" and a guide that mentions it does not.
+ */
+export const CATALOG_OVERVIEW_URLS: string[] = [
+  ...new Set(
+    [
+      ...RAILWAY_PRODUCTS.map((product) => product.docs[0]),
+      ...RAILWAY_CAPABILITIES.map((capability) => capability.docs[0]),
+    ].filter((url): url is string => Boolean(url)),
+  ),
+];
+
+const OVERVIEW_URL_SET = new Set(CATALOG_OVERVIEW_URLS);
+
+/** Whether a URL is a surface's overview page, which retrieval ranks up. */
+export function isCatalogOverviewUrl(url: string): boolean {
+  return OVERVIEW_URL_SET.has(url);
+}
 
 /** A model writes "cron jobs", "Cron Jobs", and "Cron  jobs" for the same thing. */
 function normalize(name: string): string {
@@ -653,7 +684,7 @@ export function matchProducts(text: string, limit = RAILWAY_PRODUCTS.length): Ra
     // Only when the label is not already one of the keywords, so a surface
     // whose name is its own first keyword is not counted twice.
     const label = normalize(product.label);
-    if (!product.keywords.includes(label) && lower.includes(label)) score += 3;
+    if (!product.keywords.includes(label) && countOccurrences(lower, label) > 0) score += 3;
     return { product, score };
   }).filter((entry) => entry.score > 0);
 
@@ -661,8 +692,29 @@ export function matchProducts(text: string, limit = RAILWAY_PRODUCTS.length): Ra
   return scored.slice(0, limit).map((entry) => entry.product);
 }
 
+/** A term short enough that finding it inside another word is the likely outcome. */
+const SHORT_TERM = 4;
+
+function escapeForRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * How many times a keyword appears, counting whole words for the short ones.
+ *
+ * A plain substring search is right for a phrase somebody chose and wrong for
+ * a three-letter word: "log" is in every blog, "ram" is in every program,
+ * "port" is in every support page, and "cli" is in every client. Each of those
+ * pointed real signals at the wrong surface.
+ */
 function countOccurrences(haystack: string, needle: string): number {
   if (!needle) return 0;
+
+  if (needle.length <= SHORT_TERM && !needle.includes(" ")) {
+    const matches = haystack.match(new RegExp(`\\b${escapeForRegex(needle)}(?:e?s)?\\b`, "g"));
+    return matches?.length ?? 0;
+  }
+
   let count = 0;
   let index = haystack.indexOf(needle);
   while (index !== -1) {
