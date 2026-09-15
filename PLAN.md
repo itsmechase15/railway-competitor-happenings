@@ -168,6 +168,11 @@ Tables, in `migrations/001_init.sql`:
 - `pages` – Railway pages read, and which competitors they mention
 - `claims` – competitor-mentioning paragraphs that can be cited
 
+None of it is reachable over Supabase's Data API, by
+`migrations/002_close_data_api.sql`: row-level security on with no policies, no
+`anon` or `authenticated` grants, and no schema default privileges to hand the
+same thing to the next table. `DATABASE_URL` is the only way in.
+
 ## Secrets
 
 All in this repo's Actions secrets. Never in the repo, never in a chat.
