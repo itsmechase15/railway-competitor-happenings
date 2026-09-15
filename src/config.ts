@@ -4,8 +4,12 @@ import type { CompetitorId } from "./types.js";
 export interface CompetitorConfig {
   id: CompetitorId;
   label: string;
-  /** RSS or Atom changelog feed. */
-  changelogFeed: string;
+  /**
+   * RSS or Atom changelog feed. Absent for a competitor whose changelog is not
+   * read, in which case the changelog source is skipped rather than reported
+   * as broken.
+   */
+  changelogFeed?: string;
   /**
    * Sitemaps to diff for blog posts. Sitemap indexes are followed one level
    * deep, so pointing at an index is fine. Empty when the site publishes none,
@@ -47,10 +51,14 @@ export const COMPETITORS: Record<CompetitorId, CompetitorConfig> = {
   vercel: {
     id: "vercel",
     label: "Vercel",
-    // One Atom feed carries both the changelog and the blog.
-    changelogFeed: "https://vercel.com/atom",
-    sitemaps: ["https://vercel.com/crawled-sitemap.xml"],
-    blogIndexes: [],
+    /*
+     * No changelog: Vercel's changelog is not a source here. Its only feed
+     * mixes changelog entries into the blog and cannot be read for one without
+     * the other, so the blog index is the read. It describes each post it
+     * lists, so a candidate off it carries the post's real title and date.
+     */
+    sitemaps: [],
+    blogIndexes: ["https://vercel.com/blog"],
     blogPathPrefixes: ["/blog/"],
     xUsername: "vercel",
     aliases: ["vercel"],

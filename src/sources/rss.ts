@@ -129,8 +129,10 @@ export function changelogExternalId(entry: FeedEntry): string {
   return sha1(`${entry.title}|${entry.publishedAt?.toISOString() ?? ""}`);
 }
 
+/** `feed` is passed rather than read off the competitor: not every one has one. */
 export function feedEntriesToItems(
   competitor: CompetitorConfig,
+  feed: string,
   entries: FeedEntry[],
 ): CandidateItem[] {
   return entries.map((entry) => ({
@@ -138,10 +140,10 @@ export function feedEntriesToItems(
     source: "changelog" as const,
     externalId: changelogExternalId(entry),
     title: entry.title || competitor.label,
-    url: entry.link || competitor.changelogFeed,
+    url: entry.link || feed,
     publishedAt: entry.publishedAt,
     raw: {
-      feed: competitor.changelogFeed,
+      feed,
       guid: entry.guid,
       body: truncate(entry.body, 8_000),
       image: entry.image,

@@ -79,8 +79,8 @@ export const REQUIREMENTS: Requirement[] = [
     howToGet: "cursor.com/dashboard → Integrations → API Keys → Create key",
     without: "the run falls back to restating the source, labeled 'not model-analyzed'",
   },
-  // The plan has X optional from phase 1 on: the run ships changelogs and
-  // blogs with or without a bearer token. A repo that never gets one is a
+  // The plan has X optional from phase 1 on: the run ships the blogs and the
+  // changelog with or without a bearer token. A repo that never gets one is a
   // working repo, so an unset token is reported and never fails a check.
   {
     name: "X_BEARER_TOKEN",
@@ -294,8 +294,8 @@ export function formatReport(report: EnvReport, strict: boolean): string {
 /**
  * Whether the report should stop a run. Only the required variables do. A
  * missing source costs that one source and nothing else, so `--strict` reports
- * it and moves on: a repo with no X token is a repo that posts changelogs and
- * blogs every morning, and failing its preflight would be a lie.
+ * it and moves on: a repo with no X token is a repo that posts blogs and a
+ * changelog every morning, and failing its preflight would be a lie.
  */
 export function isFailing(report: EnvReport): boolean {
   return report.missingRequired.length > 0;
