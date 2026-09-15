@@ -1,13 +1,20 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { COMPETITORS } from "../src/config.js";
-import { indexLinksToItems, isArticleUrl, sitemapEntriesToItems } from "../src/sources/blog.js";
+import { COMPETITORS, type CompetitorConfig } from "../src/config.js";
+import {
+  indexCardsToItems,
+  indexLinksToItems,
+  isArticleUrl,
+  sitemapEntriesToItems,
+} from "../src/sources/blog.js";
 import { entryUrl, isAnchoredEntry } from "../src/sources/link.js";
 import { changelogExternalId, feedEntriesToItems, parseFeed } from "../src/sources/rss.js";
 import { parseSitemap } from "../src/sources/sitemap.js";
-import { extractLinks } from "../src/util/html.js";
+import { extractArticleCards, extractLinks } from "../src/util/html.js";
 
 const renderFeed = readFileSync("test/fixtures/render-changelog.fixture.xml", "utf8");
+const RENDER_FEED_URL = "https://render.com/changelog/feed.xml";
+const vercelBlog = readFileSync("test/fixtures/vercel-blog.fixture.html", "utf8");
 
 describe("the changelog feed", () => {
   it("reads an Atom feed whose bodies are CDATA HTML", () => {
@@ -26,7 +33,7 @@ describe("the changelog feed", () => {
   });
 
   it("turns entries into candidates the deduplicator can key on", () => {
-    const items = feedEntriesToItems(COMPETITORS.render, parseFeed(renderFeed));
+    const items = feedEntriesToItems(COMPETITORS.render, RENDER_FEED_URL, parseFeed(renderFeed));
     expect(items[0]?.competitor).toBe("render");
     expect(items[0]?.source).toBe("changelog");
     expect(items[0]?.externalId).toBe(
@@ -68,7 +75,7 @@ describe("the changelog feed", () => {
 
 describe("an entry that is an anchor on a shared page", () => {
   it("keeps the anchor, so the alert links the release rather than the page", () => {
-    const [item] = feedEntriesToItems(COMPETITORS.render, [
+    const [item] = feedEntriesToItems(COMPETITORS.render, RENDER_FEED_URL, [
       {
         title: "Something shipped",
         link: "https://render.com/changelog",
@@ -86,37 +93,122 @@ describe("an entry that is an anchor on a shared page", () => {
   });
 
   it("falls back to the item's own page when the feed gave no anchor", () => {
-    const [item] = feedEntriesToItems(COMPETITORS.render, parseFeed(renderFeed));
+    const [item] = feedEntriesToItems(COMPETITORS.render, RENDER_FEED_URL, parseFeed(renderFeed));
     expect(entryUrl(item!)).toBe(item?.url);
   });
 });
 
+/**
+ * Neither competitor is read this way today – Render publishes no sitemap at
+ * the root and Vercel is read from its blog index – so the reader is exercised
+ * against a competitor that says it publishes one.
+ */
 describe("the blog sitemap", () => {
+  const publisher: CompetitorConfig = {
+    ...COMPETITORS.render,
+    sitemaps: ["https://render.com/blog-sitemap.xml"],
+  };
   const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
     <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-      <url><loc>https://vercel.com/blog/fluid-compute</loc><lastmod>2026-09-10</lastmod></url>
-      <url><loc>https://vercel.com/blog</loc><lastmod>2026-09-10</lastmod></url>
-      <url><loc>https://vercel.com/blog/tag/ai</loc><lastmod>2026-09-10</lastmod></url>
-      <url><loc>https://vercel.com/docs/functions</loc><lastmod>2026-09-10</lastmod></url>
-      <url><loc>https://vercel.com/blog/old-post</loc><lastmod>2020-01-01</lastmod></url>
+      <url><loc>https://render.com/blog/build-pipelines</loc><lastmod>2026-09-10</lastmod></url>
+      <url><loc>https://render.com/blog</loc><lastmod>2026-09-10</lastmod></url>
+      <url><loc>https://render.com/blog/tag/ai</loc><lastmod>2026-09-10</lastmod></url>
+      <url><loc>https://render.com/docs/deploys</loc><lastmod>2026-09-10</lastmod></url>
+      <url><loc>https://render.com/blog/old-post</loc><lastmod>2020-01-01</lastmod></url>
     </urlset>`;
 
   it("keeps posts and drops the index, the taxonomy pages, and the docs", () => {
-    const items = sitemapEntriesToItems(COMPETITORS.vercel, parseSitemap(sitemap).entries, {
+    const items = sitemapEntriesToItems(publisher, parseSitemap(sitemap).entries, {
       since: new Date("2026-09-01T00:00:00.000Z"),
       limit: 10,
     });
 
-    expect(items.map((item) => item.url)).toEqual(["https://vercel.com/blog/fluid-compute"]);
+    expect(items.map((item) => item.url)).toEqual(["https://render.com/blog/build-pipelines"]);
     expect(items[0]?.source).toBe("blog");
   });
 
   it("follows a sitemap index one level down", () => {
     const index = `<?xml version="1.0" encoding="UTF-8"?>
       <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-        <sitemap><loc>https://vercel.com/blog-sitemap.xml</loc></sitemap>
+        <sitemap><loc>https://render.com/blog-sitemap.xml</loc></sitemap>
       </sitemapindex>`;
-    expect(parseSitemap(index).children).toEqual(["https://vercel.com/blog-sitemap.xml"]);
+    expect(parseSitemap(index).children).toEqual(["https://render.com/blog-sitemap.xml"]);
+  });
+});
+
+/**
+ * Vercel's changelog is not a source. Its blog index is, and it describes every
+ * post it lists, so a candidate off it arrives with the post's own title and
+ * its publish date rather than a slug and a null.
+ */
+describe("the Vercel blog index", () => {
+  const cards = () => extractArticleCards(vercelBlog, "https://vercel.com/blog", ["/blog/"]);
+
+  it("reads a title and a date off each card, once per post", () => {
+    expect(cards()).toEqual([
+      {
+        url: "https://vercel.com/blog/introducing-flat-rate-cdn",
+        title: "Introducing Flat Rate CDN",
+        published: "2026-09-08T00:00-04:00",
+      },
+      {
+        url: "https://vercel.com/blog/how-we-cut-cdn-metadata-lookup-latency-by-91-percent",
+        title: "How we cut CDN metadata lookup latency by 91%",
+        published: "2026-09-10T00:00+00:00",
+      },
+      {
+        url: "https://vercel.com/blog/fluid-compute-takes-any-shape",
+        title: "Compute that takes any shape",
+        published: "2026-09-01T00:00-07:00",
+      },
+    ]);
+  });
+
+  it("turns them into dated candidates keyed on the post URL", () => {
+    const items = indexCardsToItems(COMPETITORS.vercel, cards(), { limit: 10 });
+
+    expect(items[0]?.competitor).toBe("vercel");
+    expect(items[0]?.source).toBe("blog");
+    expect(items[0]?.url).toBe("https://vercel.com/blog/introducing-flat-rate-cdn");
+    expect(items[0]?.externalId).toBe("https://vercel.com/blog/introducing-flat-rate-cdn");
+    expect(items[0]?.title).toBe("Introducing Flat Rate CDN");
+    expect(items[0]?.publishedAt?.toISOString()).toBe("2026-09-08T04:00:00.000Z");
+    expect(items[0]?.raw).toEqual({
+      discoveredVia: "blog-index",
+      indexDate: "2026-09-08T00:00-04:00",
+    });
+  });
+
+  it("names nothing from the changelog", () => {
+    const urls = extractLinks(vercelBlog, "https://vercel.com/blog", ["/blog/"]);
+    expect(urls.some((url) => url.includes("/changelog"))).toBe(false);
+    expect(cards().some((card) => card.url.includes("/changelog"))).toBe(false);
+  });
+
+  it("leaves a post the index only links for the bare-link read to find", () => {
+    const cardItems = indexCardsToItems(COMPETITORS.vercel, cards(), { limit: 10 });
+    const described = new Set(cardItems.map((item) => item.url));
+    const links = extractLinks(vercelBlog, "https://vercel.com/blog", ["/blog/"]);
+    const items = indexLinksToItems(
+      COMPETITORS.vercel,
+      links.filter((link) => !described.has(link)),
+      { limit: 10 },
+    );
+
+    expect(items.map((item) => item.url)).toEqual(["https://vercel.com/blog/an-undescribed-post"]);
+    expect(items[0]?.publishedAt).toBeNull();
+  });
+
+  it("falls back to the slug when a card names no title", () => {
+    const [item] = indexCardsToItems(
+      COMPETITORS.vercel,
+      [{ url: "https://vercel.com/blog/introducing-run", title: "", published: "" }],
+      { limit: 10 },
+    );
+
+    expect(item?.title).toBe("Introducing run");
+    expect(item?.publishedAt).toBeNull();
+    expect(item?.raw).toEqual({ discoveredVia: "blog-index" });
   });
 });
 
@@ -162,6 +254,10 @@ describe("the blog index, for a competitor with no sitemap", () => {
     expect(isArticleUrl("https://render.com/blog/feed.rss", ["/blog/"])).toBe(false);
     expect(isArticleUrl("https://render.com/blog/tag/ai", ["/blog/"])).toBe(false);
   });
+
+  it("finds no cards to read, so the bare links stay the whole listing", () => {
+    expect(extractArticleCards(html, "https://render.com/blog", ["/blog/"])).toEqual([]);
+  });
 });
 
 describe("the competitors the plan fixes", () => {
@@ -169,14 +265,23 @@ describe("the competitors the plan fixes", () => {
     expect(Object.keys(COMPETITORS)).toEqual(["render", "vercel"]);
   });
 
-  it("gives each one a changelog feed and a way to find blog posts", () => {
+  it("gives each one a way to find blog posts", () => {
     for (const competitor of Object.values(COMPETITORS)) {
-      expect(competitor.changelogFeed, competitor.label).toMatch(/^https:\/\//);
       expect(
         competitor.sitemaps.length + competitor.blogIndexes.length,
         competitor.label,
       ).toBeGreaterThan(0);
     }
+  });
+
+  it("reads Render's changelog feed and no changelog for Vercel", () => {
+    expect(COMPETITORS.render.changelogFeed).toBe(RENDER_FEED_URL);
+    expect(COMPETITORS.vercel.changelogFeed).toBeUndefined();
+  });
+
+  it("reads Vercel from its blog index, not a feed and not a sitemap", () => {
+    expect(COMPETITORS.vercel.blogIndexes).toEqual(["https://vercel.com/blog"]);
+    expect(COMPETITORS.vercel.sitemaps).toEqual([]);
   });
 
   it("reads each one's own page about Railway, as context only", () => {

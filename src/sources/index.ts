@@ -1,10 +1,10 @@
 import { COMPETITORS, COMPETITOR_IDS, type CompetitorConfig, type Config } from "../config.js";
 import { createLogger } from "../log.js";
 import type { CandidateItem, CompetitorId, SourceId } from "../types.js";
-import { extractLinks } from "../util/html.js";
+import { type ArticleCard, extractArticleCards, extractLinks } from "../util/html.js";
 import { fetchJson, fetchText } from "../util/http.js";
-import { daysAgo } from "../util/text.js";
-import { indexLinksToItems, sitemapEntriesToItems } from "./blog.js";
+import { daysAgo, normalizeUrl } from "../util/text.js";
+import { indexCardsToItems, indexLinksToItems, sitemapEntriesToItems } from "./blog.js";
 import { feedEntriesToItems, parseFeed } from "./rss.js";
 import { parseSitemap, type SitemapEntry } from "./sitemap.js";
 import {
@@ -36,14 +36,15 @@ function http(config: Config) {
 async function collectChangelog(
   config: Config,
   competitor: CompetitorConfig,
+  feed: string,
 ): Promise<CandidateItem[]> {
-  const xml = await fetchText(competitor.changelogFeed, {
+  const xml = await fetchText(feed, {
     ...http(config),
     accept: "application/atom+xml, application/rss+xml, application/xml;q=0.9, */*;q=0.8",
   });
   const entries = parseFeed(xml);
   log.info(`${competitor.label} changelog: ${entries.length} feed entries`);
-  return feedEntriesToItems(competitor, entries).slice(0, CANDIDATE_LIMIT);
+  return feedEntriesToItems(competitor, feed, entries).slice(0, CANDIDATE_LIMIT);
 }
 
 async function readSitemap(config: Config, url: string): Promise<SitemapEntry[]> {
@@ -67,9 +68,12 @@ async function readSitemap(config: Config, url: string): Promise<SitemapEntry[]>
 }
 
 /**
- * Blog posts, however this competitor publishes them. Vercel has a sitemap
- * with dates on it, so that is the cheaper read. Render has none at the root,
- * so its blog index is the listing and dedupe against `items` is the diff.
+ * Blog posts, however this competitor publishes them. A sitemap with dates on
+ * it is the cheapest read, so it wins where there is one. Otherwise the blog
+ * index is the listing and dedupe against `items` is the diff: Vercel
+ * describes each post on it, so those candidates arrive with a real title and
+ * a real date, and Render publishes bare links, so its candidates arrive with
+ * neither and `enrichArticles` fills them in.
  */
 async function collectBlog(config: Config, competitor: CompetitorConfig): Promise<CandidateItem[]> {
   if (competitor.sitemaps.length > 0) {
@@ -87,16 +91,29 @@ async function collectBlog(config: Config, competitor: CompetitorConfig): Promis
     return items;
   }
 
+  const cards: ArticleCard[] = [];
   const links: string[] = [];
   for (const index of competitor.blogIndexes) {
     const html = await fetchText(index, {
       ...http(config),
       accept: "text/html,application/xhtml+xml",
     });
+    cards.push(...extractArticleCards(html, index, competitor.blogPathPrefixes));
     links.push(...extractLinks(html, index, competitor.blogPathPrefixes));
   }
-  const items = indexLinksToItems(competitor, links, { limit: CANDIDATE_LIMIT });
-  log.info(`${competitor.label} blog: ${links.length} index links, ${items.length} candidates`);
+
+  const described = indexCardsToItems(competitor, cards, { limit: CANDIDATE_LIMIT });
+  const known = new Set(described.map((item) => item.url));
+  const bare = indexLinksToItems(
+    competitor,
+    links.filter((link) => !known.has(normalizeUrl(link))),
+    { limit: CANDIDATE_LIMIT - described.length },
+  );
+
+  const items = [...described, ...bare];
+  log.info(
+    `${competitor.label} blog: ${links.length} index links, ${described.length} described, ${items.length} candidates`,
+  );
   return items;
 }
 
@@ -144,7 +161,10 @@ export async function collectCandidates(config: Config): Promise<CollectionResul
 
   for (const id of COMPETITOR_IDS) {
     const competitor = COMPETITORS[id];
-    await run(`${id}/changelog`, () => collectChangelog(config, competitor));
+    // A competitor with no changelog feed is not a broken source: Vercel is
+    // read from its blog and nothing else, so there is nothing to note.
+    const feed = competitor.changelogFeed;
+    if (feed) await run(`${id}/changelog`, () => collectChangelog(config, competitor, feed));
     await run(`${id}/blog`, () => collectBlog(config, competitor));
 
     if (config.xBearerToken) {
