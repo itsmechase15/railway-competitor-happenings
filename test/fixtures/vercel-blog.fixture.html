@@ -1,0 +1,71 @@
+<!--
+  https://vercel.com/blog, cut down to the parts the reader uses: the card
+  wrapper, the post link, the date, the heading, and the chrome that has to be
+  ignored. The class soup is gone; the structure is Vercel's own, including the
+  lead post running twice and the customer stories that live off /blog/.
+-->
+<!doctype html>
+<html lang="en">
+  <body>
+    <header>
+      <a href="/blog">Blog</a>
+      <a href="/changelog">Changelog</a>
+    </header>
+    <main>
+      <ul>
+        <li>
+          <article aria-label="Introducing Flat Rate CDN">
+            <a data-zone="same" href="/blog/introducing-flat-rate-cdn">
+              <div>
+                <span><time dateTime="2026-09-08T00:00-04:00">8 September</time></span>
+                <span>Company news</span>
+              </div>
+              <h3>Introducing Flat Rate CDN</h3>
+            </a>
+          </article>
+        </li>
+        <li>
+          <article aria-label="How Featured's users make 100K media pitches per month on Vercel">
+            <a href="/customers/how-featureds-users-make-100k-media-pitches-per-month-on-vercel">
+              <div><span><time dateTime="2026-09-11T00:00-04:00">11 September</time></span></div>
+              <h3>How Featured's users make 100K media pitches per month on Vercel</h3>
+            </a>
+          </article>
+        </li>
+        <li>
+          <article aria-label="How we cut CDN metadata lookup latency by 91%">
+            <a href="/blog/how-we-cut-cdn-metadata-lookup-latency-by-91-percent">
+              <div>
+                <span><time dateTime="2026-09-10T00:00+00:00">10 September</time></span>
+                <span>Engineering</span>
+              </div>
+              <h3>How we cut CDN metadata lookup latency by 91%</h3>
+            </a>
+          </article>
+        </li>
+        <li>
+          <article aria-label="Introducing Flat Rate CDN">
+            <a href="/blog/introducing-flat-rate-cdn">
+              <div><span><time dateTime="2026-09-08T00:00-04:00">8 September</time></span></div>
+              <h3>Introducing Flat Rate CDN</h3>
+            </a>
+          </article>
+        </li>
+        <li>
+          <article aria-label="Compute that takes any shape">
+            <a href="/blog/fluid-compute-takes-any-shape">
+              <div><span><time dateTime="2026-09-01T00:00-07:00">1 September</time></span></div>
+              <h3>Compute that takes any shape</h3>
+            </a>
+          </article>
+        </li>
+      </ul>
+      <nav aria-label="Categories">
+        <a href="/blog/category/engineering">Engineering</a>
+        <a href="/blog/category/company-news">Company news</a>
+        <a href="/blog/page/2">Next page</a>
+      </nav>
+      <a href="/blog/an-undescribed-post">A post with no card around it</a>
+    </main>
+  </body>
+</html>

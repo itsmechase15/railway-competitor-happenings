@@ -1,6 +1,7 @@
 import type { CompetitorConfig } from "../config.js";
 import type { CandidateItem } from "../types.js";
-import { normalizeUrl, titleFromUrl } from "../util/text.js";
+import type { ArticleCard } from "../util/html.js";
+import { normalizeUrl, parseDate, titleFromUrl } from "../util/text.js";
 import { matchesAnyPrefix, type SitemapEntry } from "./sitemap.js";
 
 /** Paths that are listings or taxonomy pages rather than posts. */
@@ -69,11 +70,50 @@ export function sitemapEntriesToItems(
 }
 
 /**
- * Turn the links on a blog index into candidates. Render publishes no sitemap
- * at the root, so its index is the listing: every post URL on it is a
- * candidate, and the `items` table decides which of them is new. There is no
- * date here at all, which is why a null `publishedAt` has to survive the
- * lookback filter – a missing date is not evidence of staleness.
+ * Turn the cards on a blog index into candidates. A listing that names and
+ * dates its own posts is the whole read: the title is the one the post was
+ * published under rather than its slug with the hyphens taken out, and the
+ * date is there without fetching every post to find out whether it is recent.
+ * A card with no date still becomes a candidate, because a missing date is not
+ * evidence of staleness.
+ */
+export function indexCardsToItems(
+  competitor: CompetitorConfig,
+  cards: ArticleCard[],
+  options: Pick<BlogCandidateOptions, "limit">,
+): CandidateItem[] {
+  const seen = new Set<string>();
+
+  return cards
+    .filter((card) => isArticleUrl(card.url, competitor.blogPathPrefixes))
+    .map((card) => ({ ...card, url: normalizeUrl(card.url) }))
+    .filter((card) => {
+      if (seen.has(card.url)) return false;
+      seen.add(card.url);
+      return true;
+    })
+    .slice(0, options.limit)
+    .map((card) => ({
+      competitor: competitor.id,
+      source: "blog" as const,
+      externalId: card.url,
+      title: card.title || titleFromUrl(card.url),
+      url: card.url,
+      publishedAt: parseDate(card.published),
+      raw: {
+        discoveredVia: "blog-index",
+        ...(card.published ? { indexDate: card.published } : {}),
+      },
+    }));
+}
+
+/**
+ * Turn the bare links on a blog index into candidates. Render publishes no
+ * sitemap at the root and describes nothing on its index, so the links are the
+ * listing: every post URL on it is a candidate, and the `items` table decides
+ * which of them is new. There is no date here at all, which is why a null
+ * `publishedAt` has to survive the lookback filter – a missing date is not
+ * evidence of staleness.
  */
 export function indexLinksToItems(
   competitor: CompetitorConfig,

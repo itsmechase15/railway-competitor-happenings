@@ -194,6 +194,30 @@ export function htmlToText(html: string): string {
 }
 
 /**
+ * Reads an `href` on a listing page as an absolute, normalized URL, or null
+ * when it leaves the site or sits outside the prefixes its posts live under.
+ */
+function linkReader(
+  baseUrl: string,
+  prefixes: string[],
+): (href: string | undefined) => string | null {
+  const origin = new URL(baseUrl).origin;
+
+  return (href) => {
+    if (!href) return null;
+    let url: URL;
+    try {
+      url = new URL(href, baseUrl);
+    } catch {
+      return null;
+    }
+    if (url.origin !== origin) return null;
+    if (!prefixes.some((prefix) => url.pathname.startsWith(prefix))) return null;
+    return normalizeUrl(url.toString());
+  };
+}
+
+/**
  * Every same-origin link on a page whose path starts with one of `prefixes`,
  * deduplicated and normalized. This is how a blog with no sitemap is read:
  * the index is the listing, and novelty comes from diffing these URLs against
@@ -201,23 +225,66 @@ export function htmlToText(html: string): string {
  */
 export function extractLinks(html: string, baseUrl: string, prefixes: string[]): string[] {
   const $ = cheerio.load(html);
-  const origin = new URL(baseUrl).origin;
+  const read = linkReader(baseUrl, prefixes);
   const found: string[] = [];
 
   $("a[href]").each((_, element) => {
-    const href = $(element).attr("href");
-    if (!href) return;
-    let url: URL;
-    try {
-      url = new URL(href, baseUrl);
-    } catch {
-      return;
-    }
-    if (url.origin !== origin) return;
-    if (!prefixes.some((prefix) => url.pathname.startsWith(prefix))) return;
-    const normalized = normalizeUrl(url.toString());
-    if (!found.includes(normalized)) found.push(normalized);
+    const url = read($(element).attr("href"));
+    if (url !== null && !found.includes(url)) found.push(url);
   });
 
   return found;
+}
+
+/** One post on a blog index, as the listing itself describes it. */
+export interface ArticleCard {
+  url: string;
+  /** The listing's own title for the post. Empty when the card carries none. */
+  title: string;
+  /** The card's date, verbatim. Empty when the card carries none. */
+  published: string;
+}
+
+/**
+ * The posts a blog index describes rather than merely links. Vercel wraps each
+ * post in an `<article>` carrying its title and its date, so the listing is
+ * the whole candidate: the title is the post's own rather than a slug read
+ * back as a sentence, and the date is there without fetching the post to find
+ * it. An index that publishes bare links yields nothing here, and
+ * `extractLinks` is the read for those.
+ */
+export function extractArticleCards(
+  html: string,
+  baseUrl: string,
+  prefixes: string[],
+): ArticleCard[] {
+  const $ = cheerio.load(html);
+  const read = linkReader(baseUrl, prefixes);
+  const cards = new Map<string, ArticleCard>();
+
+  $("article").each((_, element) => {
+    const node = $(element);
+    // The card's first link to a post, not its first link: a byline or a
+    // category tag can sit ahead of the headline.
+    let url: string | null = null;
+    node.find("a[href]").each((_index, anchor) => {
+      url = read($(anchor).attr("href"));
+      return url === null;
+    });
+    // A listing usually runs its lead post twice, as the hero and again in the
+    // grid. The first card wins; both say the same thing.
+    if (url === null || cards.has(url)) return;
+
+    cards.set(url, {
+      url,
+      // `aria-label` is the card's title said once, where the heading can be
+      // split across a byline, a category, and a teaser.
+      title: collapseWhitespace(
+        node.attr("aria-label") ?? node.find("h1, h2, h3, h4").first().text(),
+      ),
+      published: collapseWhitespace(node.find("time[datetime]").first().attr("datetime") ?? ""),
+    });
+  });
+
+  return [...cards.values()];
 }
