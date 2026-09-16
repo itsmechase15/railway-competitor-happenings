@@ -7,6 +7,8 @@ import {
   type ReviewPassResult,
   type ReviewTarget,
 } from "../src/review/apply.js";
+import type { PageVisual } from "../src/media/page-edit.js";
+import type { PageVisualMaker } from "../src/media/visual.js";
 import type { Reviewer, ReviewOutcome } from "../src/review/reviewer.js";
 import type { Revision } from "../src/review/schema.js";
 import type { ActionWriter } from "../src/review/writer.js";
@@ -200,6 +202,22 @@ interface RunOptions {
   budget?: number;
   editor?: RecordingEditor;
   alert?: AnalyzedItem;
+  visualMaker?: PageVisualMaker;
+}
+
+/**
+ * A maker that draws nothing but records what it was asked to draw, so a test
+ * can tell a redrawn picture from a reused one without launching a browser.
+ */
+class RecordingVisualMaker implements PageVisualMaker {
+  readonly description = "recording";
+  readonly asked: Array<{ action: RecommendedAction; copy: string | undefined }> = [];
+
+  async make(subject: AnalyzedItem, action: RecommendedAction): Promise<PageVisual[]> {
+    const edited = subject.analysis.railwayRefs.find((ref) => ref.proposedText);
+    this.asked.push({ action, copy: edited?.proposedText });
+    return [];
+  }
 }
 
 async function run(
@@ -214,6 +232,7 @@ async function run(
     editor,
     reviewer: options.reviewer === undefined ? fakeReviewer("agree") : options.reviewer,
     writer: options.writer === undefined ? fakeWriter(goodRewrite) : options.writer,
+    ...(options.visualMaker ? { visualMaker: options.visualMaker } : {}),
     index,
     workspace: null,
     budget: createReviewBudget({ reviewMaxPerRun: options.budget ?? 12 } as never),
@@ -343,12 +362,18 @@ describe("revise", () => {
   });
 
   /** An update_pages action's substance is the copy for the page, so that is what a revise rewrites. */
-  const pageRun = (revision: Revision, changes = ["Name where the meter applies, in its voice."]) =>
+  const pageRun = (
+    revision: Revision,
+    extra: Pick<RunOptions, "visualMaker"> & { changes?: string[] } = {},
+  ) =>
     run({
       targets: [{ action: pageAction, issue, labels: openedLabels }],
       alert: { ...alert, analysis: { ...alert.analysis, actions: [pageAction] } },
-      reviewer: fakeReviewer("revise", { changes }),
+      reviewer: fakeReviewer("revise", {
+        changes: extra.changes ?? ["Name where the meter applies, in its voice."],
+      }),
       writer: fakeWriter(revision),
+      ...(extra.visualMaker ? { visualMaker: extra.visualMaker } : {}),
     });
 
   const rewritten =
@@ -376,6 +401,32 @@ describe("revise", () => {
     expect(patch?.body).toContain(rewritten);
     // The before/after shows the copy, because on a page action it is the change.
     expect(editor.comments[0]).toContain(`- Copy for it: "${rewritten}"`);
+  });
+
+  /**
+   * The picture on a page-edit issue is of the copy the issue asks for. A revise
+   * changes exactly that, so reusing the picture already on the issue would show
+   * copy nobody is proposing any more, which is worse than showing none.
+   */
+  it("redraws the before/after from the rewrite rather than reusing the old one", async () => {
+    const visualMaker = new RecordingVisualMaker();
+    await pageRun(
+      { pageEdits: [{ url: COMPARE, proposedText: rewritten }] },
+      { visualMaker },
+    );
+
+    expect(visualMaker.asked).toHaveLength(1);
+    expect(visualMaker.asked[0]?.copy).toBe(rewritten);
+  });
+
+  it("draws nothing when a rewrite could not be confirmed, because the issue did not change", async () => {
+    const visualMaker = new RecordingVisualMaker();
+    await pageRun(
+      { pageEdits: [{ url: COMPARE, proposedText: "Say that Render meters idle services." }] },
+      { visualMaker },
+    );
+
+    expect(visualMaker.asked).toEqual([]);
   });
 
   it("refuses a rewrite that writes about the edit instead of writing it", async () => {

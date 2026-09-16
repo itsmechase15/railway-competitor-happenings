@@ -2,6 +2,7 @@ import { relevantDocs } from "../analysis/verify.js";
 import { COMPETITORS, type Config } from "../config.js";
 import { actionLabel, actionOwner, IMPACT_LABEL, IMPACT_MEANING, SOURCE_LABEL } from "../labels.js";
 import { createLogger } from "../log.js";
+import type { PageVisual } from "../media/page-edit.js";
 import { isDocsUrl, isMarketingTarget } from "../railway/pages.js";
 import { findProductByName, productForDocUrl, productsForAction } from "../railway/products.js";
 import { RAILWAY_ABOUT_URL } from "../railway/teams.js";
@@ -154,8 +155,19 @@ const EDIT_KIND_LABEL: Record<EditKind, string> = {
  * itself and this puts it in a code block somebody can copy without picking
  * the prose back out of a sentence about it.
  */
-function pageEdit(ref: RailwayRef): string {
-  const lines = [`### ${ref.url}`, `- **Copy today:** ${ref.claim}`];
+function pageEdit(ref: RailwayRef, visual: PageVisual | undefined): string {
+  const lines = [`### ${ref.url}`];
+  // The picture goes above the words. It answers the first question anybody
+  // asked to make the edit has – what does the paragraph look like with this in
+  // it – and it answers it before they have read a line.
+  if (visual) {
+    lines.push(
+      `![${visual.altText}](${visual.imageUrl})`,
+      `_Before and after, drawn from the stored copy of this page${SPACED_EN_DASH}${visual.summary}._`,
+      "",
+    );
+  }
+  lines.push(`- **Copy today:** ${ref.claim}`);
   if (ref.suggestedEdit) lines.push(`- **What the edit does:** ${ref.suggestedEdit}`);
 
   if (ref.proposedText) {
@@ -173,7 +185,11 @@ function pageEdit(ref: RailwayRef): string {
  * because editing the page is the job; product gets the docs that speak to the
  * action it is being asked to take, and nothing else.
  */
-function pagesSection(alert: AnalyzedItem, action: RecommendedAction): string {
+function pagesSection(
+  alert: AnalyzedItem,
+  action: RecommendedAction,
+  visuals: PageVisual[],
+): string {
   const heading = isPageAction(action)
     ? "## Railway pages to update"
     : "## Railway docs for context";
@@ -189,7 +205,9 @@ function pagesSection(alert: AnalyzedItem, action: RecommendedAction): string {
   if (isPageAction(action)) {
     const note =
       "_The copy below is written to go straight onto the page, in that page's own voice. Read the page around it before you paste, and edit it if the page has moved on._";
-    return `${heading}\n${note}\n\n${refs.map(pageEdit).join("\n\n")}`;
+    const byPage = new Map(visuals.map((visual) => [visual.pageUrl, visual]));
+    const edits = refs.map((ref) => pageEdit(ref, byPage.get(ref.url))).join("\n\n");
+    return `${heading}\n${note}\n\n${edits}`;
   }
 
   const pages = refs.map((ref) => `### ${ref.url}\n- **Claim today:** ${ref.claim}`).join("\n\n");
@@ -295,6 +313,7 @@ export function buildIssueBody(
   alert: AnalyzedItem,
   image: FeatureImage | null,
   action: RecommendedAction,
+  visuals: PageVisual[] = [],
 ): string {
   const { item, analysis, model } = alert;
   const competitor = COMPETITORS[item.competitor];
@@ -309,7 +328,7 @@ export function buildIssueBody(
     evidenceSection(action),
     `## Impact\n${impactScale(analysis.impact)}`,
     `## More detail\n${bullets(analysis.keyPoints, "The source gave nothing beyond the summary above.")}`,
-    pagesSection(alert, action),
+    pagesSection(alert, action, visuals),
     docsThatWouldChangeSection(alert, action),
     `## Open questions\n${bullets(analysis.openQuestions, "None raised.")}`,
     `## Sources\n- [${competitor.label} ${SOURCE_LABEL[item.source]}](${entryUrl(item)})${
@@ -325,13 +344,22 @@ export function buildIssueDraft(
   alert: AnalyzedItem,
   image: FeatureImage | null,
   action: RecommendedAction,
+  visuals: PageVisual[] = [],
 ): IssueDraft {
   return {
     title: buildIssueTitle(alert, action),
-    body: buildIssueBody(alert, image, action),
+    body: buildIssueBody(alert, image, action, visuals),
     labels: buildIssueLabels(alert, action),
   };
 }
+
+/**
+ * The Before/After pictures already drawn for each action, keyed by the action
+ * itself. Keyed by identity rather than by index because the drawing and the
+ * drafting are two passes over the same action objects, and an index that
+ * silently slipped would put one page's picture on another page's issue.
+ */
+export type ActionVisuals = ReadonlyMap<RecommendedAction, PageVisual[]>;
 
 /**
  * One draft per recommended action. An alert that says "enhance Serverless,
@@ -341,10 +369,11 @@ export function buildIssueDraft(
 export function buildIssueDrafts(
   alert: AnalyzedItem,
   image: FeatureImage | null,
+  visuals?: ActionVisuals,
 ): ActionIssueDraft[] {
   return alert.analysis.actions.map((action) => ({
     action,
-    draft: buildIssueDraft(alert, image, action),
+    draft: buildIssueDraft(alert, image, action, visuals?.get(action) ?? []),
   }));
 }
 

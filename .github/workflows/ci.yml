@@ -15,7 +15,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # Nothing here launches a browser: the Before/After tests check the HTML
+      # and the diff, which is the part that can be wrong. Downloading Chromium
+      # for them would add a hundred megabytes to every pull request.
       - run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       - run: npm run typecheck
       - run: npm test
       - run: npm run build

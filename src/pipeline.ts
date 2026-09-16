@@ -18,6 +18,8 @@ import {
 } from "./github/issue.js";
 import { createLogger } from "./log.js";
 import { resolveFeatureImage } from "./media/image.js";
+import type { PageVisual } from "./media/page-edit.js";
+import { createPageVisualMaker, type PageVisualMaker } from "./media/visual.js";
 import { refreshDocsCorpus } from "./railway/corpus.js";
 import { buildCorpusIndex } from "./railway/retrieval.js";
 import { writeDocsWorkspace } from "./railway/workspace.js";
@@ -32,7 +34,13 @@ import { createActionWriter, type ActionWriter } from "./review/writer.js";
 import { enrichArticles } from "./sources/enrich.js";
 import { collectCandidates, groupBySourceKey } from "./sources/index.js";
 import { entryUrl } from "./sources/link.js";
-import type { Alert, AnalyzedItem, CandidateItem, StoredItem } from "./types.js";
+import type {
+  Alert,
+  AnalyzedItem,
+  CandidateItem,
+  RecommendedAction,
+  StoredItem,
+} from "./types.js";
 import { daysAgo, normalizeUrl, SPACED_EN_DASH } from "./util/text.js";
 
 const log = createLogger("pipeline");
@@ -160,13 +168,21 @@ async function prepareAlert(
   config: Config,
   issues: IssueCreator,
   review: ReviewServices,
+  visualMaker: PageVisualMaker,
   analyzed: AnalyzedItem,
   context: RunContext,
 ): Promise<PreparedAlert> {
   const image = await resolveFeatureImage(config, analyzed.item);
 
+  // Drawn before the drafts, because a page edit's issue embeds its picture and
+  // an issue body cannot be given one after it is opened without a second write.
+  const visuals = new Map<RecommendedAction, PageVisual[]>();
+  for (const action of analyzed.analysis.actions) {
+    visuals.set(action, await visualMaker.make(analyzed, action));
+  }
+
   const targets: ReviewTarget[] = [];
-  for (const { action, draft } of buildIssueDrafts(analyzed, image)) {
+  for (const { action, draft } of buildIssueDrafts(analyzed, image, visuals)) {
     targets.push({ action, issue: await issues.create(draft), labels: draft.labels });
   }
 
@@ -177,6 +193,7 @@ async function prepareAlert(
     editor: review.editor,
     reviewer: review.reviewer,
     writer: review.writer,
+    visualMaker,
     index: context.index,
     workspace: context.workspace,
     budget: review.budget,
@@ -293,6 +310,8 @@ export async function runSingleItem(config: Config, targetUrl: string): Promise<
 
   try {
     const { context } = await prepareCorpus(config, store);
+    const visualMaker = createPageVisualMaker(config, context.index);
+    log.info(`update_pages before/after images: ${visualMaker.description}`);
 
     const { candidates } = await collectCandidates(config);
     const wanted = normalizeUrl(targetUrl);
@@ -334,7 +353,7 @@ export async function runSingleItem(config: Config, targetUrl: string): Promise<
     }
     if (!analyzed) throw new Error(`analysis produced nothing for ${targetUrl}`);
 
-    const { alert } = await prepareAlert(config, issues, review, analyzed, context);
+    const { alert } = await prepareAlert(config, issues, review, visualMaker, analyzed, context);
     const message = buildDiscordMessage(alert);
     const analysisId = await store.recordAnalysis({
       itemId: stored.id,
@@ -374,6 +393,8 @@ export async function runCycle(config: Config): Promise<RunSummary> {
   try {
     const corpus = await prepareCorpus(config, store);
     summary.notes.push(...corpus.notes);
+    const visualMaker = createPageVisualMaker(config, corpus.context.index);
+    log.info(`update_pages before/after images: ${visualMaker.description}`);
 
     const collection = await collectCandidates(config);
     summary.candidates = collection.candidates.length;
@@ -406,7 +427,14 @@ export async function runCycle(config: Config): Promise<RunSummary> {
 
     const fresh: PendingPost[] = [];
     for (const entry of analyzed) {
-      const prepared = await prepareAlert(config, issues, review, entry, corpus.context);
+      const prepared = await prepareAlert(
+        config,
+        issues,
+        review,
+        visualMaker,
+        entry,
+        corpus.context,
+      );
       const alert = prepared.alert;
       summary.issuesOpened += prepared.opened;
       summary.issuesClosed += prepared.closed;

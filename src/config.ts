@@ -141,6 +141,13 @@ export interface Config {
   /** Skip the review pass entirely. For a fast local run, not for the daily job. */
   skipReview: boolean;
   /**
+   * Stop drawing the Before/After image on an `update_pages` issue. It is the
+   * one thing in the app that runs a browser and commits to the repo, so it has
+   * a switch of its own – an issue without the picture says the same thing in
+   * words.
+   */
+  skipPageVisuals: boolean;
+  /**
    * Reviews allowed in one run. Past it, an action keeps the issue it was filed
    * with and picks up a `review:skipped` label saying nobody looked.
    */
@@ -253,6 +260,7 @@ export function loadConfig(): Config {
     reviewModel: str("REVIEW_MODEL") ?? DEFAULT_REVIEW_MODEL,
     updaterModel: str("UPDATER_MODEL") ?? str("CURSOR_MODEL") ?? "claude-opus-5",
     skipReview: bool("SKIP_REVIEW", false),
+    skipPageVisuals: bool("SKIP_PAGE_VISUALS", false),
     reviewMaxPerRun: int("REVIEW_MAX_PER_RUN", 12),
     xBearerToken: str("X_BEARER_TOKEN"),
     lookbackDays: int("LOOKBACK_DAYS", 7),
