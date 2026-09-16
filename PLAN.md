@@ -350,13 +350,60 @@ code block, labeled as a replacement for the quoted line or as an insert next
 to it.
 
 Labels: `competitor-happenings`, `render|vercel`, `source:<label>`,
-`impact:<level>`, `action:<action>`, `owner:product|marketing`.
+`impact:<level>`, `action:<action>`, `owner:product|marketing`, and one
+`review:<verdict>` from the pass below.
+
+## Review every action once
+
+The mistake worth the most to catch is an issue telling Railway to build
+something Railway already ships. The evidence gate catches the ones whose
+evidence is missing or fake. What it cannot catch is the claim whose evidence is
+real and whose counter-evidence is on a page the analyst never opened, argued
+well enough to read as true.
+
+So once an action's issue is open, a **second model** reads the same corpus and
+returns one verdict on that action:
+
+| Verdict | Issue | Embed |
+| --- | --- | --- |
+| `agree` | Comment naming the pages it read, `review:agreed` | Unchanged |
+| `revise` | Title, body, and labels rewritten, with a before/after comment, `review:revised` | Carries the corrected action |
+| `drop` | Closed as not planned, `review:dropped` | The action is absent, and an alert that loses all of them shows **None** with the reason |
+
+A `revise` is applied by the analyst's model in one text-only run: no corpus, no
+tools, and only the pages the reviewer read in its prompt. What comes back is
+bounded twice. `mergeRevision` refuses anything the reviewer did not ask for – a
+type change that is not a swap between the two product actions, a surface name
+the catalog does not know, an impact move nobody requested, copy for a page the
+analysis never cited or that marketing does not write. Then `checkAction` runs
+the whole chain again: docs reconciliation, page targets, topic guard, evidence
+gate, sentence shaping. A rewrite that fails any of it is thrown away, the
+original issue stands, and the label is `review:unconfirmed`. There is no third
+pass.
+
+For an `update_pages` action the rewrite **is** the copy for the page, so it is
+held to the same `copyFault` check the analyst's `proposed_text` is: an
+instruction, a fragment, or a placeholder is refused, and the original copy
+stands.
+
+The pass runs between the issues and the Discord post. The issue exists, so a
+verdict has somewhere to write itself; the embed has not gone out, so a dropped
+action is absent rather than corrected. It runs once per action: an edit never
+calls the reviewer, every verdict stamps `review-pass:done`, the entry point
+refuses an issue carrying it, the verdict is stored on the analysis row so a
+retried post finds it, and `REVIEW_MAX_PER_RUN` (12) caps a run.
+
+Models: `REVIEW_MODEL` (`claude-fable-5-1`) reviews, `UPDATER_MODEL`
+(`CURSOR_MODEL`) rewrites, `SKIP_REVIEW` turns the pass off for a local run. A
+model id the Cursor SDK turns down costs the run nothing: the action is filed as
+written and labelled `review:skipped`.
 
 ## Phase 1 vs later
 
 **Phase 1** – both blogs and Render's changelog, Opus analysis against the docs
-corpus with read-only search over it, the evidence gate, Discord embeds, one
-issue per surviving action, Supabase dedupe, 7am PT cron, dry-run and
+corpus with read-only search over it, the evidence gate, the one-pass review of
+every filed action, Discord embeds, one issue per surviving action, Supabase
+dedupe, 7am PT cron, dry-run and
 force-post workflows, `check-env`. X source ships in Phase 1 if
 `X_BEARER_TOKEN` is available, otherwise it is skipped with a log line.
 

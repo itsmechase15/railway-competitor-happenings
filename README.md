@@ -34,6 +34,44 @@ page's own voice, so the issue is a copy and a paste rather than a writing
 assignment. "Mention the new thing here" is not an edit, and an action that
 proposes one is dropped like any other unevidenced claim.
 
+Then every action that made it into an issue is reviewed once, by a second
+model over the same corpus, before the embed goes out. See
+[Reviewing what it filed](#reviewing-what-it-filed).
+
+## Reviewing what it filed
+
+Once an action's GitHub issue is open, a different model – `claude-fable-5-1` by
+default, not the analyst's Opus – reads Railway's docs corpus and returns one of
+three verdicts on that action alone.
+
+| Verdict | What happens | Label |
+| --- | --- | --- |
+| `agree` | The issue stands as filed, with a comment naming the pages the reviewer opened | `review:agreed` |
+| `revise` | The analyst's model rewrites the action, text-only, and the rewrite goes back through the whole evidence chain in code. It reaches the issue only if it survives | `review:revised` |
+| `drop` | The issue is closed as not planned, and the action is absent from the embed rather than corrected in it | `review:dropped` |
+
+A rewrite that fails the chain is thrown away. The original issue stands, the
+comment says what the reviewer wanted and why the rewrite could not be
+confirmed, and the label is `review:unconfirmed` so a person settles it. There
+is no third pass: nothing is filed on a claim that could not be checked, because
+there is no way to correct such a claim without inventing the correction.
+
+The pass sits between the issues and the Discord post on purpose. The issue
+exists, so the whole exchange lives in its own history; the embed has not gone
+out, so a dropped action is simply not in it.
+
+It runs once per action, and five things hold that: an edit never calls the
+reviewer, every verdict stamps the issue `review-pass:done`, the entry point
+refuses an issue that carries it, the verdict is stored on the analysis row so a
+retried post finds it, and `REVIEW_MAX_PER_RUN` caps a run at twelve reviews
+(anything past it is filed as written and labelled `review:skipped`).
+
+This is not a model marking its own homework, which this repo deliberately does
+not do. It is a **different model**, shown the **analyst's claim** rather than
+its own, with the **corpus underneath it**, whose rewrite is **re-checked by
+code** rather than by another model, **once**. Take away any one of those and it
+becomes the pass [AGENTS.md](./AGENTS.md) rules out.
+
 ## Sources
 
 | Competitor | Read | Not read |
@@ -94,7 +132,7 @@ embed shape, docs grounding, data store, impact scale, actions, and phasing.
 
 | Workflow | When | What it does |
 | --- | --- | --- |
-| `daily.yml` | 14:00 UTC (7am PT), or by hand | One full cycle: refresh the Railway index, collect, dedupe, analyze, open issues, post |
+| `daily.yml` | 14:00 UTC (7am PT), or by hand | One full cycle: refresh the Railway index, collect, dedupe, analyze, open issues, review them, post |
 | `force-post.yml` | By hand, or a URL committed to `.github/force-post-url.txt` | Posts one named announcement, ignoring dedupe and the first-run seed guard |
 | `check-secrets.yml` | By hand | Names every missing secret and asks Discord what the bot can see. Posts nothing |
 | `ci.yml` | Push and pull request | Typecheck, tests, build |
@@ -137,6 +175,12 @@ psql "$DATABASE_URL" -f migrations/003_docs_corpus.sql
 | `CURSOR_API_KEY` | 1 | Opus analysis via the Cursor API |
 | `X_BEARER_TOKEN` | 1+ (optional) | The X source. Unset skips it |
 | `AGENTMAIL_API_KEY` + inbox id | 2 | The newsletter source |
+
+Three variables tune the review pass, and all three default in
+[`src/config.ts`](./src/config.ts): `REVIEW_MODEL` (the reviewer,
+`claude-fable-5-1`), `UPDATER_MODEL` (what applies a revise, the analyst's
+model), and `REVIEW_MAX_PER_RUN` (12). A `REVIEW_MODEL` your API key cannot run
+costs the run nothing: the review is skipped and the label says so.
 
 `GITHUB_TOKEN` comes from Actions with `issues: write`.
 
@@ -201,6 +245,12 @@ the embeds it prints are the embeds a real run would post. `SKIP_RAILWAY_INDEX=t
 skips the corpus for a fast local run, at the cost of every gap claim being
 dropped for want of anything to check it against.
 
+A dry run reviews too. The reviewer and the writer both run, the payload shows
+the revised actions and omits the dropped ones, and the issue editor logs what it
+would have written instead of writing it – so a dry run shows the whole outcome,
+not the half of it that needs no credentials. `SKIP_REVIEW=true` turns the pass
+off when you are iterating on something else.
+
 ## How it is put together
 
 | Path | What lives there |
@@ -215,8 +265,9 @@ dropped for want of anything to check it against.
 | `src/analysis/analyst.ts` | One analyst run, read-only, with the files it opened recorded |
 | `src/analysis/evidence.ts` | The gate: citations, quotes, the coverage check, page edits |
 | `src/analysis/` | The prompt, the reply schema, the docs-grounding guards, and the no-key fallback |
+| `src/review/` | The one-pass review: the two prompts, what a rewrite may change, and the code that re-checks it |
 | `src/discord/` | The embed and the bot that posts it |
-| `src/github/` | One issue per recommended action that passed every check |
+| `src/github/` | One issue per recommended action that passed every check, and the edits a verdict writes back |
 | `src/db/` | Postgres, the in-memory store for dry runs, and the dedupe contract |
 | `src/pipeline.ts` | The daily cycle, and single-item mode |
 | `migrations/001_init.sql` | The four tables |
