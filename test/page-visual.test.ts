@@ -153,6 +153,7 @@ describe("planning one page edit", () => {
     expect(plan().pageName).toBe("Compare to render");
     expect(plan().beforeAlt).toContain("as it reads today");
     expect(plan().afterAlt).toContain("with the proposed copy in it");
+    expect(plan().afterAlt).toContain("highlighted in yellow");
     expect(plan().afterAlt).toContain(plan().summary);
   });
 });
@@ -429,7 +430,8 @@ describe("the pictures on the issue", () => {
       beforeUrl: `https://github.com/o/r/blob/9f4c1b2d3e/${VISUAL_DIR}/x-before.png?raw=true`,
       afterUrl: `https://github.com/o/r/blob/9f4c1b2d3e/${VISUAL_DIR}/x-after.png?raw=true`,
       beforeAlt: "The compare to render page as it reads today, the quoted line in place",
-      afterAlt: "The compare to render page with the proposed copy in it: 16 words added",
+      afterAlt:
+        "The compare to render page with the proposed copy in it, highlighted in yellow: 16 words added",
     },
     summary: "16 words added, 13 words removed",
     capturedOn: TODAY,
@@ -462,6 +464,10 @@ describe("the pictures on the issue", () => {
   it("says the after was staged in a browser and published nowhere", () => {
     expect(body([visual])).toContain("staged in a browser only. Nothing was published.");
     expect(body([visual])).toContain(`the live page on ${TODAY}`);
+  });
+
+  it("says the highlight on the after is what marks the recommended copy", () => {
+    expect(body([visual])).toContain("highlighted in place");
   });
 
   it("puts them above the copy somebody came to paste", () => {

@@ -167,7 +167,9 @@ const EDIT_KIND_LABEL: Record<EditKind, string> = {
  *
  * The After shot is of a page with words on it that nobody has published, so
  * its caption says exactly that. Somebody scrolling an issue about their own
- * docs page must not come away thinking the edit is live.
+ * docs page must not come away thinking the edit is live. The highlight on the
+ * recommended copy is named for the same reason: it is how the shot points at
+ * the edit, and it is not paint anybody put on the page.
  */
 function beforeAndAfter(visual: PageVisual): string[] {
   if (!visual.shots) {
@@ -183,7 +185,7 @@ function beforeAndAfter(visual: PageVisual): string[] {
     `**Before**${SPACED_EN_DASH}the live page on ${visual.capturedOn}`,
     `![${beforeAlt}](${beforeUrl})`,
     "",
-    `**After**${SPACED_EN_DASH}the same page with the proposed copy staged in a browser only. Nothing was published.`,
+    `**After**${SPACED_EN_DASH}the same page with the proposed copy highlighted in place, staged in a browser only. Nothing was published.`,
     `![${afterAlt}](${afterUrl})`,
     "",
     `_${visual.summary}._`,

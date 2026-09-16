@@ -199,7 +199,7 @@ export function planPageEdit(
     proposedText: proposed,
     summary,
     beforeAlt: `${pageNameFromUrl(ref.url)} as it reads today, the quoted line in place`,
-    afterAlt: `${name} with the proposed copy in it: ${summary}`,
+    afterAlt: `${name} with the proposed copy in it, highlighted in yellow: ${summary}`,
     beforePath: paths.before,
     afterPath: paths.after,
     capturedOn,

@@ -397,7 +397,13 @@ the same page with the proposed copy in it.
 Taken off the live page. A headless browser opens it, shoots the window, puts
 the copy into that tab's own DOM, and shoots the window again from the same
 scroll offset. Nothing is published: the edit never leaves the tab, the tab is
-thrown away, and the After's caption in the issue says so. The line is found by
+thrown away, and the After's caption in the issue says so. The copy that went
+in is highlighted on the second shot and nothing else is, for both a replace
+and an insert, so the edit is a yellow band in a thumbnail rather than a
+paragraph to find. The highlight is inline `!important` on a `<mark>`, which is
+the one thing a docs site's own styling for `mark` cannot outrank, and it is
+named in the caption because it is not paint anybody put on the page. The line
+is found by
 its text, folded to letters and digits the way the evidence gate folds it, in
 the deepest block under `<main>` that holds all of it, so a redesign does not
 break it and a table of contents cannot win against the prose.

@@ -13,6 +13,10 @@ import type { PageEditPlan } from "./page-edit.js";
  * page is photographed again. Two PNGs of the docs site as a visitor sees it:
  * sidebar, header, typography, everything.
  *
+ * The recommended copy is highlighted on the After shot and nowhere else, so
+ * the answer to "what am I looking at that is different" is a yellow band
+ * rather than a paragraph to re-read against the shot above it.
+ *
  * **Nothing is published by any of this.** The edit lives in one browser tab's
  * in-memory DOM for the second or two between the two screenshots, and the tab
  * is thrown away. No form is submitted, no request is made to Railway beyond
@@ -117,6 +121,7 @@ export type StageOutcome =
 function stagePageEdit(input: StageInput): StageOutcome {
   const MARKER = "data-happenings-edit";
   const INSERTED = "data-happenings-inserted";
+  const HIGHLIGHT = "data-happenings-highlight";
   const BLOCKS = "p, li, td, th, h1, h2, h3, h4, h5, h6, blockquote, dd";
   /** How far down the window the edited paragraph is parked. */
   const SCROLL_FRACTION = 0.25;
@@ -230,10 +235,51 @@ function stagePageEdit(input: StageInput): StageOutcome {
   }
 
   /**
+   * The new copy, wrapped in a mark a reader cannot miss.
+   *
+   * The two shots are of the same page at the same offset, so a reader flicking
+   * between them sees a paragraph that is a different length and has to read
+   * both to find out where. The After says which words are the recommendation
+   * by painting them, and only them: the rest of the paragraph is the page's,
+   * and the Before is never marked at all.
+   *
+   * Written as inline `!important` declarations rather than a class or a bare
+   * `<mark>`, because a docs site styles `mark` for its own callouts and a
+   * stylesheet that paints it white would take the highlight off the one shot
+   * that needs it. An inline important declaration is the one thing a page's
+   * own CSS cannot outrank. Nothing here changes the layout – the colour, a
+   * radius and a shadow standing in for padding – so the marked paragraph wraps
+   * exactly where the unmarked one would.
+   */
+  function highlight(text: string): HTMLElement {
+    const mark = document.createElement("mark");
+    mark.setAttribute(HIGHLIGHT, "");
+    mark.textContent = text;
+    const style: Array<[string, string]> = [
+      ["background-color", "#ffe066"],
+      // The page's own text colour may be a pale grey chosen against the page's
+      // background rather than against a highlight.
+      ["color", "#1a1a1a"],
+      ["box-shadow", "0 0 0 0.12em #ffe066"],
+      ["border-radius", "0.15em"],
+      // Each line of a wrapped highlight gets its own rounded end, rather than
+      // the first line keeping the left one and the last the right.
+      ["box-decoration-break", "clone"],
+      ["-webkit-box-decoration-break", "clone"],
+    ];
+    for (const [property, value] of style) mark.style.setProperty(property, value, "important");
+    return mark;
+  }
+
+  /**
    * Put the copy in. A replace swaps the quoted run and leaves the links and
    * code around it alone; an insert leaves the line where it is and puts the
    * new copy next to it. Extra paragraphs are shallow clones of the element
    * they follow, so they inherit the page's own styling for a paragraph.
+   *
+   * Every paragraph of the copy goes in highlighted, and nothing else is
+   * touched, so what is painted on the After shot is exactly what the issue
+   * asks somebody to write.
    */
   function applyEdit(element: HTMLElement): boolean {
     const copy = paragraphs();
@@ -247,13 +293,13 @@ function stagePageEdit(input: StageInput): StageOutcome {
       const range = rangeFor(element);
       if (!range) return false;
       range.deleteContents();
-      range.insertNode(document.createTextNode(copy[0]!));
+      range.insertNode(highlight(copy[0]!));
       rest = copy.slice(1);
     }
 
     for (const extra of rest) {
       const sibling = element.cloneNode(false) as HTMLElement;
-      sibling.textContent = extra;
+      sibling.append(highlight(extra));
       sibling.setAttribute(INSERTED, "");
       anchor.after(sibling);
       anchor = sibling;
