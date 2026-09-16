@@ -159,6 +159,38 @@ const EDIT_KIND_LABEL: Record<EditKind, string> = {
 };
 
 /**
+ * The two screenshots of the page, stacked and captioned.
+ *
+ * Stacked rather than side by side: an issue column is about 830 pixels wide,
+ * so two pictures of a 1280-wide page next to each other are unreadable and
+ * the whole point of them is that they are readable.
+ *
+ * The After shot is of a page with words on it that nobody has published, so
+ * its caption says exactly that. Somebody scrolling an issue about their own
+ * docs page must not come away thinking the edit is live.
+ */
+function beforeAndAfter(visual: PageVisual): string[] {
+  if (!visual.shots) {
+    return visual.copyMissingLive
+      ? [
+          `_The quoted copy was not found on the live page on ${visual.capturedOn}, so there is no before and after of it. The page may already have been changed${SPACED_EN_DASH}read it before you edit it._`,
+        ]
+      : [];
+  }
+
+  const { beforeUrl, afterUrl, beforeAlt, afterAlt } = visual.shots;
+  return [
+    `**Before**${SPACED_EN_DASH}the live page on ${visual.capturedOn}`,
+    `![${beforeAlt}](${beforeUrl})`,
+    "",
+    `**After**${SPACED_EN_DASH}the same page with the proposed copy staged in a browser only. Nothing was published.`,
+    `![${afterAlt}](${afterUrl})`,
+    "",
+    `_${visual.summary}._`,
+  ];
+}
+
+/**
  * One page to edit: what it says now, what the edit is for, and the copy to
  * paste.
  *
@@ -170,16 +202,10 @@ const EDIT_KIND_LABEL: Record<EditKind, string> = {
  */
 function pageEdit(ref: RailwayRef, visual: PageVisual | undefined): string {
   const lines = [pageHeading(ref.url)];
-  // The picture goes above the words. It answers the first question anybody
-  // asked to make the edit has – what does the paragraph look like with this in
-  // it – and it answers it before they have read a line.
-  if (visual) {
-    lines.push(
-      `![${visual.altText}](${visual.imageUrl})`,
-      `_Before and after, drawn from the stored copy of this page${SPACED_EN_DASH}${visual.summary}._`,
-      "",
-    );
-  }
+  // The pictures go above the words. They answer the first question anybody
+  // asked to make the edit has – what does the page look like with this on it –
+  // and they answer it before a line has been read.
+  if (visual) lines.push(...beforeAndAfter(visual), "");
   lines.push(`- **Copy today:** ${ref.claim}`);
   if (ref.suggestedEdit) lines.push(`- **What the edit does:** ${ref.suggestedEdit}`);
 
