@@ -109,13 +109,12 @@ export type StageOutcome =
  * the evidence gate uses – letters and digits, lowercased – means a curly
  * apostrophe or a collapsed run of spaces is not a miss.
  *
- * Exported so a test can run it against a fixture with `page.setContent`.
- *
- * Self-contained to the last line, constants included: Playwright hands the
- * browser this function's own source, and anything it reads from the module
- * around it is a `ReferenceError` in the page.
+ * Self-contained to the last line, constants included: what reaches the browser
+ * is this function's own source, so anything it reads from the module around it
+ * is a `ReferenceError` in the page. {@link stageExpression} is how it gets
+ * there.
  */
-export function stagePageEdit(input: StageInput): StageOutcome {
+function stagePageEdit(input: StageInput): StageOutcome {
   const MARKER = "data-happenings-edit";
   const INSERTED = "data-happenings-inserted";
   const BLOCKS = "p, li, td, th, h1, h2, h3, h4, h5, h6, blockquote, dd";
