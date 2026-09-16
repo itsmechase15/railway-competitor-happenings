@@ -75,6 +75,19 @@ const feature = optionalText(120);
 const gap = optionalText(400);
 const quote = optionalText(600);
 
+/**
+ * The teams a model named for one action. Kept as it wrote them: the catalog
+ * decides which of these are real Railway teams, and it does that at the point
+ * something is rendered rather than here.
+ */
+const teamNames = z.preprocess(
+  (value) =>
+    Array.isArray(value)
+      ? value.filter((entry) => typeof entry === "string" && entry.trim() !== "")
+      : value,
+  z.array(z.string().min(1)).max(5).optional(),
+);
+
 /** One entry of `actions`, in whichever casing the model reached for. */
 const actionSchema = z.object({
   type: actionToken.optional(),
@@ -85,6 +98,9 @@ const actionSchema = z.object({
   feature,
   railway_feature: feature,
   railwayFeature: feature,
+  teams: teamNames,
+  railway_teams: teamNames,
+  railwayTeams: teamNames,
   gap,
   gap_today: gap,
   evidence_url: optionalText(500),
@@ -135,6 +151,7 @@ function toAction(parsed: z.infer<typeof actionSchema>): RecommendedAction | nul
   if (!type || !actionDetail) return null;
 
   const named = parsed.feature ?? parsed.railway_feature ?? parsed.railwayFeature;
+  const teams = parsed.teams ?? parsed.railway_teams ?? parsed.railwayTeams;
   const namedGap = parsed.gap ?? parsed.gap_today;
   const evidenceUrl = parsed.evidence_url ?? parsed.evidenceUrl;
   const evidenceQuote = parsed.evidence_quote ?? parsed.evidenceQuote;
@@ -143,6 +160,7 @@ function toAction(parsed: z.infer<typeof actionSchema>): RecommendedAction | nul
     type,
     detail: clean(actionDetail),
     ...(named ? { feature: clean(named) } : {}),
+    ...(teams && teams.length > 0 ? { teams: teams.map((team) => team.trim()) } : {}),
     ...(namedGap ? { gap: clean(namedGap) } : {}),
     ...(evidenceUrl ? { evidenceUrl: evidenceUrl.trim() } : {}),
     // Not punctuation-corrected: a quote is checked character by character

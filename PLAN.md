@@ -340,18 +340,44 @@ from the bot.
 
 One issue per action that passed every check, in this repo, opened before the
 embed so every action has a link. An alert with no surviving action opens
-nothing. Title `Competitor: feature – Action`. Body carries the action in
-full, the gap it closes with the docs page it was read off and the line quoted
-from it, summary, detail, the whole impact scale with this level checked, open
-questions, sources, and the image. Product issues cite the docs that back the
-action and end with the docs that would change if Railway ships it. Marketing
-issues carry url + copy today + what the edit does + the copy to paste, in a
-code block, labeled as a replacement for the quoted line or as an insert next
-to it.
+nothing. Title `Competitor: feature – Action`.
+
+The body reads in the order a reader needs it. Metadata line and image, then
+**what you need to know**, then the **recommended action**, then the teams it is
+for. Somebody who reads that far and closes the tab has the whole point of the
+issue. Everything that justifies the action comes after all three: the gap it
+closes with the docs page it was read off and the line quoted from it, the whole
+impact scale with this level checked, the detail bullets, the cited pages, open
+questions, and sources. Product issues cite the docs that back the action and
+end with the docs that would change if Railway ships it. Marketing issues carry
+url + copy today + what the edit does + the copy to paste, in a code block,
+labeled as a replacement for the quoted line or as an insert next to it.
 
 Labels: `competitor-happenings`, `render|vercel`, `source:<label>`,
-`impact:<level>`, `action:<action>`, `owner:product|marketing`, and one
-`review:<verdict>` from the pass below.
+`impact:<level>`, `action:<action>`, `owner:product|marketing`, one to three
+`team:<slug>` from the routing below, and one `review:<verdict>` from the pass
+after it.
+
+## Route it to a team, not to a department
+
+`owner:product` names nobody. Railway publishes no team pages, but the about
+page publishes every employee's title, and the titles are the org, so
+[`src/railway/teams.ts`](./src/railway/teams.ts) holds the twelve teams those
+titles add up to and the surfaces each one builds.
+
+The analyst picks one to three, most involved first, from a list of names and
+owned surfaces in its prompt. Its answer is checked, not trusted: a name that is
+not on the about page is dropped rather than mapped to something near it, so
+"Product", "Engineering", and "Inference Engineering" get nothing back. What
+survives falls through to who owns the surface the action names, then to the team
+vocabulary in the action's own words, then to Marketing for a page edit and
+Product Engineering for anything else. The cap of three is real – a longer list
+routes worse than a short one – and there is no team for the CEO or for Head of
+Engineering, whose work the two engineering teams already cover.
+
+Refreshing the list means reading the about page again. Nothing in it is derived
+from the product catalog, so a team Railway grows into stays missing until
+someone edits that file.
 
 ## Review every action once
 

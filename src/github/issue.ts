@@ -4,7 +4,9 @@ import { actionLabel, actionOwner, IMPACT_LABEL, IMPACT_MEANING, SOURCE_LABEL } 
 import { createLogger } from "../log.js";
 import { isDocsUrl, isMarketingTarget } from "../railway/pages.js";
 import { findProductByName, productForDocUrl, productsForAction } from "../railway/products.js";
+import { RAILWAY_ABOUT_URL } from "../railway/teams.js";
 import { entryUrl } from "../sources/link.js";
+import { relatedTeams, relatedTeamsLabel } from "../teams.js";
 import {
   IMPACTS,
   type AnalyzedItem,
@@ -75,7 +77,9 @@ function isPageAction(action: RecommendedAction): boolean {
 /**
  * Labels for one action's issue. Beyond the alert's own labels, the action
  * type and the owner are what a marketing or product filter actually queries,
- * and the surface label is added whenever the action names one we recognize.
+ * the `team:` labels name the Railway teams the work is for so a filter can be
+ * one team rather than a whole org, and the surface label is added whenever the
+ * action names one we recognize.
  */
 export function buildIssueLabels(alert: AnalyzedItem, action: RecommendedAction): string[] {
   const { item, analysis } = alert;
@@ -91,6 +95,7 @@ export function buildIssueLabels(alert: AnalyzedItem, action: RecommendedAction)
     `impact:${analysis.impact}`,
     `action:${labelSlug(action.type)}`,
     `owner:${actionOwner(action)}`,
+    ...relatedTeams(action).map((team) => `team:${team.slug}`),
     ...(product ? [`${product.kind}:${labelSlug(product.label)}`] : []),
   ];
 }
@@ -256,6 +261,20 @@ function impactScale(impact: Impact): string {
   ).join("\n");
 }
 
+/**
+ * The teams this issue is for, and where the names came from.
+ *
+ * Railway publishes no team pages, only the about page's grid of people and
+ * their titles, so the link is to that page rather than to a page per team. It
+ * is there because a reader who has not met these names before should be able
+ * to see what they were read off, and reroute the issue when the read was
+ * wrong.
+ */
+function teamsSection(action: RecommendedAction): string {
+  const names = relatedTeamsLabel(action);
+  return `${names}${SPACED_EN_DASH}inferred from the titles on [railway.com/about](${RAILWAY_ABOUT_URL})`;
+}
+
 function bullets(values: string[], empty: string): string {
   if (values.length === 0) return `_${empty}_`;
   return values.map((value) => `- ${value}`).join("\n");
@@ -265,6 +284,12 @@ function bullets(values: string[], empty: string): string {
  * The long form of one recommended action. Everything the embed cannot carry –
  * the full detail, page citations, suggested edits, open questions – lives
  * here, scoped to the one job this issue is asking for.
+ *
+ * The order is what a reader needs in the order they need it: what happened,
+ * then what to do about it, then who it is for. Somebody who reads that far and
+ * closes the tab has the whole point of the issue, so everything that justifies
+ * the action – the gap, the impact scale, the cited pages – comes after all
+ * three rather than between them.
  */
 export function buildIssueBody(
   alert: AnalyzedItem,
@@ -278,9 +303,10 @@ export function buildIssueBody(
   const sections = [
     `**${competitor.label}** · ${SOURCE_LABEL[item.source]} · published ${published} · impact **${IMPACT_LABEL[analysis.impact]}** · owned by **${actionOwner(action)}**`,
     image ? `<img src="${image.url}" alt="${image.altText}" width="720" />` : null,
-    `## Recommended action\n**${actionLabel(action)}**${SPACED_EN_DASH}${action.detail}`,
-    evidenceSection(action),
     `## What you need to know\n${analysis.summary}`,
+    `## Recommended action\n**${actionLabel(action)}**${SPACED_EN_DASH}${action.detail}`,
+    `## Related team(s)\n${teamsSection(action)}`,
+    evidenceSection(action),
     `## Impact\n${impactScale(analysis.impact)}`,
     `## More detail\n${bullets(analysis.keyPoints, "The source gave nothing beyond the summary above.")}`,
     pagesSection(alert, action),

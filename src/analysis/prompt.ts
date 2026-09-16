@@ -3,7 +3,11 @@ import { COMPETITORS } from "../config.js";
 // it is stated once, where the embed is built.
 import { MAX_ACTION_CHARS } from "../discord/embed.js";
 import { COMPARE_AND_MIGRATE_PATHS } from "../railway/pages.js";
+import { RAILWAY_ABOUT_URL, RAILWAY_TEAMS } from "../railway/teams.js";
 import { EVIDENCE_LABEL, TOC_FILENAME } from "../railway/workspace.js";
+// The cap on how many teams an action may name is the one the issue labels
+// render to, so it is stated once, where the routing lives.
+import { MAX_TEAMS } from "../teams.js";
 import type { CompetitorClaim, RailwayClaim, RailwayDoc, StoredItem } from "../types.js";
 import { EN_DASH, truncate } from "../util/text.js";
 
@@ -48,6 +52,18 @@ function renderCompareClaims(label: string, claims: CompetitorClaim[]): string {
       return `${index + 1}. ${claim.url}${heading}\n   "${truncate(claim.paragraph, MAX_CLAIM_CHARS)}"`;
     })
     .join("\n");
+}
+
+/**
+ * Railway's teams, with the surfaces each one builds. The owned surfaces are
+ * what routing is for: the model picks the team that builds the thing the
+ * action is about, rather than a department.
+ */
+function renderTeams(): string {
+  return RAILWAY_TEAMS.map((team) => {
+    const owns = team.ownsFeatures?.length ? ` ${EN_DASH} owns ${team.ownsFeatures.join(", ")}` : "";
+    return `- ${team.name}${owns}`;
+  }).join("\n");
 }
 
 /**
@@ -127,6 +143,15 @@ export const STYLE_RULES = `Writing style, which every string you write has to f
  * wrong. `copyFault` in `src/analysis/evidence.ts` is the code half, and it
  * judges both.
  */
+/**
+ * How an action gets routed to people rather than to a department. The list of
+ * teams and what each one owns goes in the prompt body; these are the rules for
+ * choosing from it.
+ */
+const TEAM_RULES = `- "teams" is 1 to ${MAX_TEAMS} Railway teams the action is for, most involved first, copied exactly from the "Railway teams" list below. Never invent a team, never write a department: "Product", "Engineering", "Platform", "Core", and "Inference Engineering" are not Railway teams and are thrown away.
+- Pick by who builds the work. A team that owns the surface the action is about is the answer: a CDN or networking gap is for Infrastructure Engineering, a usage limit or cost control change is for Product Engineering, an MCP or coding-agent launch is for Agentic Experience, a compare or migrate page edit is for Marketing, a tutorial or template is for Developer Relations, and a competitor's migration tooling is for Solutions Engineering.
+- Two or three teams only when the work genuinely splits: the team that owns the surface plus the team that owns the plumbing under it, or Marketing plus whoever builds the thing a page is wrong about. One team is the normal answer, and a shorter list routes better than a long one.`;
+
 export const PAGE_REWRITE_RULES = `What an update_pages action hands over. The edit is finished copy, not a note asking somebody to write it. Nobody who picks this up should have to word anything themselves:
 1. Open that page's own file in the workspace and read all of it. The excerpts below are a paragraph or two, and you cannot write in a page's voice from a paragraph of it.
 2. Quote what the page says today into "claim", word for word. That line is where the edit lands, and it is checked against the stored page.
@@ -159,6 +184,7 @@ Rules:
   - consider_enhancing: Railway has something adjacent with a real gap. Name the Railway surface to enhance in "feature", e.g. "Serverless", "CDN", "Databases". The embed shows the title as "Consider enhancing Serverless", so an action with no feature reads as saying nothing. Enhancing means reaching parity with what the competitor shipped, or beating it.
   - consider_building: Railway has nothing like this, and the docs you read show the gap.
   - update_pages: a Railway compare, migrate, pricing, or features page is now wrong, understates what Railway does, or is contradicted by the competitor's own page. It has a bar of its own, below.
+${TEAM_RULES}
 - "detail" explains the work: what Railway should change, what the competitor now does, and what Railway does or does not do today. Never generic "why this matters" copy.
 - Open "detail" with one short sentence, under ${MAX_ACTION_CHARS} characters, that stands up alone: the embed shows that sentence and nothing else under the action title. Put the rest in later sentences, which the GitHub issue carries.
 - That opening sentence leads with the work, not with what Railway lacks. A reader who sees only that line has to know what is being asked for:
@@ -208,6 +234,7 @@ export const RESPONSE_SHAPE = `{
       "type": "consider_enhancing" | "consider_building" | "update_pages",
       "detail": "string",
       "feature": "string (the Railway surface to enhance; required for consider_enhancing)",
+      "teams": ["string (1 to ${MAX_TEAMS} Railway team names, exactly as listed)"],
       "gap": "string (what Railway does not do today; required for the two product actions)",
       "evidence_url": "string (the Railway docs page the gap was read off; required for the two product actions)",
       "evidence_quote": "string (words copied from that page, verbatim; required for the two product actions)"
@@ -264,6 +291,10 @@ ${truncate(toc, MAX_TOC_CHARS)}
 `
     : ""
 }
+## Railway teams, from ${RAILWAY_ABOUT_URL}
+Every team an action can be routed to, read off the titles Railway lists for its people. Pick from these names and no others.
+${renderTeams()}
+
 ## Indexed Railway compare and migrate pages that mention ${competitor.label}
 Marketing copy, and the only pages an update_pages action may target. Not evidence of what the product does. A paragraph each, so open the page's file in the workspace and read the rest of it before you write copy for it.
 ${renderClaims(context.claims ?? [])}
