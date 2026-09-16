@@ -1,0 +1,117 @@
+name: One-shot cleanup (Otto)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Delete Discord messages (issue #10 / Flat Rate CDN / CDN metadata)
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CHANNEL_ID: ${{ vars.DISCORD_CHANNEL_ID || secrets.DISCORD_CHANNEL_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DISCORD_BOT_TOKEN:-}" ] || [ -z "${DISCORD_CHANNEL_ID:-}" ]; then
+            echo "Missing DISCORD_BOT_TOKEN or DISCORD_CHANNEL_ID"
+            exit 1
+          fi
+          python3 <<'PY'
+          import json, os, re, urllib.request
+          token = os.environ["DISCORD_BOT_TOKEN"]
+          channel = os.environ["DISCORD_CHANNEL_ID"]
+          patterns = [
+              re.compile(r"issues/10\b", re.I),
+              re.compile(r"cdn metadata", re.I),
+              re.compile(r"flat.?rate.?cdn", re.I),
+              re.compile(r"91%", re.I),
+              re.compile(r"Consider enhancing CDN", re.I),
+              re.compile(r"introducing-flat-rate-cdn", re.I),
+              re.compile(r"how-we-cut-cdn-metadata", re.I),
+          ]
+          req = urllib.request.Request(
+              f"https://discord.com/api/v10/channels/{channel}/messages?limit=50",
+              headers={"Authorization": f"Bot {token}", "User-Agent": "otto-cleanup"},
+          )
+          with urllib.request.urlopen(req) as resp:
+              messages = json.load(resp)
+          deleted = []
+          for m in messages:
+              blob = json.dumps(m)
+              if any(p.search(blob) for p in patterns):
+                  mid = m["id"]
+                  dreq = urllib.request.Request(
+                      f"https://discord.com/api/v10/channels/{channel}/messages/{mid}",
+                      method="DELETE",
+                      headers={"Authorization": f"Bot {token}", "User-Agent": "otto-cleanup"},
+                  )
+                  try:
+                      with urllib.request.urlopen(dreq) as dresp:
+                          print(f"deleted Discord message {mid} status={dresp.status}")
+                          deleted.append(mid)
+                  except Exception as e:
+                      print(f"FAILED delete Discord {mid}: {e}")
+          print(f"Discord deleted_count={len(deleted)} ids={deleted}")
+          if not deleted:
+              print("No matching Discord messages found in last 50")
+          PY
+
+      - name: Try GraphQL deleteIssue #10 (may fail without delete permission)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          NODE_ID=$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/itsmechase15/railway-competitor-happenings/issues/10 \
+            | python3 -c 'import sys,json; print(json.load(sys.stdin).get("node_id",""))')
+          echo "issue_node_id=$NODE_ID"
+          if [ -z "$NODE_ID" ]; then
+            echo "Issue #10 already gone or unreadable"
+            exit 0
+          fi
+          RESP=$(curl -sS -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" \
+            https://api.github.com/graphql \
+            -d "{\"query\":\"mutation($id:ID!){ deleteIssue(input:{issueId:$id}){ clientMutationId } }\",\"variables\":{\"id\":\"$NODE_ID\"}}")
+          echo "$RESP"
+          echo "$RESP" | python3 -c 'import sys,json; d=json.load(sys.stdin); print("DELETE_OK" if d.get("data",{}).get("deleteIssue") else "DELETE_FAILED")'
+
+      - name: Close issue #10 if still present
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          CODE=$(curl -sS -o /tmp/iss.json -w "%{http_code}" -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/itsmechase15/railway-competitor-happenings/issues/10 || true)
+          if [ "$CODE" = "404" ]; then
+            echo "Issue #10 already deleted (404)"
+            exit 0
+          fi
+          curl -sS -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/itsmechase15/railway-competitor-happenings/issues/10 \
+            -d '{"state":"closed","state_reason":"not_planned"}'
+          echo
+          echo "Closed issue #10 as fallback"
+
+      - name: Remove this cleanup workflow from main
+        uses: actions/checkout@v4
+      - name: Delete workflow file and push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/otto-cleanup.yml
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Already removed"
+            exit 0
+          fi
+          git commit -m "chore: remove one-shot otto cleanup workflow"
+          git push
