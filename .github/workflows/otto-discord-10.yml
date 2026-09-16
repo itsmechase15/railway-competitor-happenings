@@ -1,0 +1,84 @@
+name: One-shot Discord #10 cleanup
+
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/otto-discord-10.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Delete only issue #10 / CDN metadata Discord messages
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CHANNEL_ID: ${{ vars.DISCORD_CHANNEL_ID || secrets.DISCORD_CHANNEL_ID }}
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import json, os, re, urllib.request, urllib.error
+          token = os.environ["DISCORD_BOT_TOKEN"]
+          channel = os.environ["DISCORD_CHANNEL_ID"]
+          print("channel", channel)
+          # Match issue #10 / CDN metadata 91% only. Never Flat Rate / #12 / #13.
+          include = [re.compile(x, re.I) for x in [
+              r"issues/10\b",
+              r"how-we-cut-cdn-metadata",
+              r"cdn metadata lookup",
+              r"91%",
+              r"Consider enhancing CDN",
+          ]]
+          exclude = [re.compile(x, re.I) for x in [
+              r"flat.?rate",
+              r"introducing-flat-rate-cdn",
+              r"issues/12\b",
+              r"issues/13\b",
+              r"Cost Control",
+          ]]
+          req = urllib.request.Request(
+              f"https://discord.com/api/v10/channels/{channel}/messages?limit=50",
+              headers={"Authorization": f"Bot {token}", "User-Agent": "otto-cleanup"},
+          )
+          with urllib.request.urlopen(req) as resp:
+              messages = json.load(resp)
+          deleted = []
+          skipped = []
+          for m in messages:
+              blob = json.dumps(m)
+              if any(p.search(blob) for p in exclude):
+                  skipped.append(m["id"])
+                  continue
+              if any(p.search(blob) for p in include):
+                  mid = m["id"]
+                  dreq = urllib.request.Request(
+                      f"https://discord.com/api/v10/channels/{channel}/messages/{mid}",
+                      method="DELETE",
+                      headers={"Authorization": f"Bot {token}", "User-Agent": "otto-cleanup"},
+                  )
+                  try:
+                      with urllib.request.urlopen(dreq) as dresp:
+                          print(f"deleted Discord message {mid} status={dresp.status}")
+                          deleted.append(mid)
+                  except urllib.error.HTTPError as e:
+                      print(f"FAILED {mid}: {e.read().decode()}")
+          print(f"Discord deleted_count={len(deleted)} ids={deleted}")
+          print(f"skipped_flat_rate_or_new ids={skipped}")
+          PY
+
+      - uses: actions/checkout@v4
+      - name: Remove this workflow
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/otto-discord-10.yml
+          git add -A
+          if git diff --cached --quiet; then echo already gone; exit 0; fi
+          git commit -m "chore: remove one-shot Discord #10 cleanup"
+          git push
