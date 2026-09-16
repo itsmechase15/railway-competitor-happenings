@@ -1,6 +1,7 @@
 import { FALLBACK_MODEL } from "../analysis/fallback.js";
 import { COMPETITORS } from "../config.js";
 import { actionTitleParts, IMPACT_COLOR, IMPACT_LABEL, SOURCE_LABEL } from "../labels.js";
+import { isMarketingTarget } from "../railway/pages.js";
 import { entryUrl } from "../sources/link.js";
 import type { ActionIssue, Alert, IssueRef, RecommendedAction, SourceId } from "../types.js";
 import { firstSentence, sanitizeCopy, sentences, SPACED_EN_DASH, truncate } from "../util/text.js";
@@ -131,19 +132,42 @@ export function detailPoints(alert: Alert): string[] {
 }
 
 /**
+ * The line that sends a page edit to the issue for its copy.
+ *
+ * A page edit is a piece of finished prose, often a paragraph of it, and a
+ * field that holds two other actions has no room for it. The sentence above
+ * already names the page, so this says where the words are, and the issue
+ * carries them in full.
+ */
+const EXACT_COPY_NOTE = "The exact copy to paste is in the issue.";
+
+/**
  * One action, as the embed shows it: a bold title, one short sentence under
  * it, then the link to that action's own issue. The title is in the value
  * rather than the field name because Discord renders a field name as plain
  * text, and the Railway surface in it is worth linking.
  */
-export function actionFieldValue(action: RecommendedAction, issue: IssueRef | null): string {
+export function actionFieldValue(
+  action: RecommendedAction,
+  issue: IssueRef | null,
+  options: { exactCopy?: boolean } = {},
+): string {
   const { label, feature } = actionTitleParts(action);
   const title = !feature
     ? escape(label)
     : `${escape(label)} ${feature.url ? link(feature.url, feature.label) : escape(feature.label)}`;
   const lines = [`**${title}**`, escape(firstSentence(action.detail, MAX_ACTION_CHARS))];
+  if (options.exactCopy && issue) lines.push(`_${escape(EXACT_COPY_NOTE)}_`);
   if (issue) lines.push(link(issue.url, issueLinkLabel(issue)));
   return lines.join("\n");
+}
+
+/** Whether an action's copy was written out, which only page edits carry. */
+export function hasExactCopy(alert: Alert, action: RecommendedAction): boolean {
+  if (action.type !== "update_pages") return false;
+  return alert.analysis.railwayRefs.some(
+    (ref) => isMarketingTarget(ref.url) && Boolean(ref.proposedText),
+  );
 }
 
 /**
@@ -255,7 +279,9 @@ export function buildDiscordEmbed(alert: Alert): DiscordEmbed {
   for (const [index, entry] of entries.entries()) {
     fields.push({
       name: index === 0 ? ACTION_HEADING : BLANK_FIELD_NAME,
-      value: actionFieldValue(entry.action, entry.issue),
+      value: actionFieldValue(entry.action, entry.issue, {
+        exactCopy: hasExactCopy(alert, entry.action),
+      }),
     });
   }
   if (entries.length === 0) {

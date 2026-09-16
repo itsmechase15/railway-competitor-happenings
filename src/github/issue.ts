@@ -8,6 +8,7 @@ import { entryUrl } from "../sources/link.js";
 import {
   IMPACTS,
   type AnalyzedItem,
+  type EditKind,
   type FeatureImage,
   type Impact,
   type IssueRef,
@@ -109,15 +110,45 @@ function supportingRefs(alert: AnalyzedItem, action: RecommendedAction): Railway
   const wanted = new Set(productsForAction(action).map((product) => product.label));
 
   return refs.filter((ref) => {
-    if (ref.suggestedEdit || !isDocsRef(ref)) return false;
+    if (ref.suggestedEdit || ref.proposedText || !isDocsRef(ref)) return false;
     const product = productForDocUrl(ref.url);
     if (!product) return true;
     return wanted.size === 0 || wanted.has(product.label);
   });
 }
 
+/** What the proposed copy does to the line quoted above it. */
+const EDIT_KIND_LABEL: Record<EditKind, string> = {
+  replace: "Replace the copy above with this, word for word:",
+  insert: "Add this next to the copy above, word for word:",
+};
+
 /**
- * The cited pages. Marketing gets the pages to edit with the suggested edits,
+ * One page to edit: what it says now, what the edit is for, and the copy to
+ * paste.
+ *
+ * The copy is the point of the section. A marketing issue reading "mention the
+ * new thing on the compare page" hands the writing to whoever opens it, who
+ * has read neither the launch nor the page, so the analysis writes the line
+ * itself and this puts it in a code block somebody can copy without picking
+ * the prose back out of a sentence about it.
+ */
+function pageEdit(ref: RailwayRef): string {
+  const lines = [`### ${ref.url}`, `- **Copy today:** ${ref.claim}`];
+  if (ref.suggestedEdit) lines.push(`- **What the edit does:** ${ref.suggestedEdit}`);
+
+  if (ref.proposedText) {
+    lines.push(`\n${EDIT_KIND_LABEL[ref.editKind ?? "replace"]}`, "```text", ref.proposedText, "```");
+  } else {
+    lines.push(
+      "\n_No exact copy was written for this page, so somebody has to word the edit themselves._",
+    );
+  }
+  return lines.join("\n");
+}
+
+/**
+ * The cited pages. Marketing gets the pages to edit with the copy to paste,
  * because editing the page is the job; product gets the docs that speak to the
  * action it is being asked to take, and nothing else.
  */
@@ -134,15 +165,13 @@ function pagesSection(alert: AnalyzedItem, action: RecommendedAction): string {
     return `${heading}\n_${empty}_`;
   }
 
-  const pages = refs
-    .map((ref) => {
-      const lines = [`### ${ref.url}`, `- **Claim today:** ${ref.claim}`];
-      if (ref.suggestedEdit && isPageAction(action)) {
-        lines.push(`- **Suggested edit:** ${ref.suggestedEdit}`);
-      }
-      return lines.join("\n");
-    })
-    .join("\n\n");
+  if (isPageAction(action)) {
+    const note =
+      "_The copy below is written to go straight onto the page, in that page's own voice. Read the page around it before you paste, and edit it if the page has moved on._";
+    return `${heading}\n${note}\n\n${refs.map(pageEdit).join("\n\n")}`;
+  }
+
+  const pages = refs.map((ref) => `### ${ref.url}\n- **Claim today:** ${ref.claim}`).join("\n\n");
 
   return `${heading}\n${pages}`;
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { heuristicAnalysis, heuristicImpact } from "../src/analysis/fallback.js";
 import { analysisSchema, normalizeAnalysis } from "../src/analysis/schema.js";
 import { buildIssueBody } from "../src/github/issue.js";
-import { IMPACTS } from "../src/types.js";
+import { IMPACTS, type RailwayRef, type RecommendedAction } from "../src/types.js";
 import { alert, analysis, featureImage, storedItem } from "./helpers.js";
 
 /**
@@ -120,5 +120,55 @@ describe("the whole scale on an issue", () => {
   it("says what each level means next to it", () => {
     const body = buildIssueBody(alert(), featureImage(), analysis().actions[0]!);
     expect(body).toContain("brand-new feature that did not exist before");
+  });
+});
+
+/**
+ * A marketing issue is only done when nobody has to word anything: the page,
+ * the line on it today, and the copy that goes in its place, in a block that
+ * survives a copy and a paste.
+ */
+describe("the copy on a page issue", () => {
+  const pageAction: RecommendedAction = {
+    type: "update_pages",
+    detail: "On the compare to render page, answer what Render now charges for an idle service.",
+  };
+
+  const proposed =
+    "Render bills a web service per request once it goes idle. Railway stops an idle container and bills it by the minute while it is awake.";
+
+  function pageBody(ref: Partial<RailwayRef> = {}): string {
+    const verdict = analysis({
+      actions: [pageAction],
+      railwayRefs: [
+        {
+          url: "https://docs.railway.com/platform/compare-to-render",
+          claim: "Railway stops an idle container; Render keeps it running.",
+          suggestedEdit: "Name the per-request billing Render now offers.",
+          proposedText: proposed,
+          ...ref,
+        },
+      ],
+    });
+    return buildIssueBody(alert({ analysis: verdict }), featureImage(), pageAction);
+  }
+
+  it("prints the page, the copy today, and the copy to paste", () => {
+    const body = pageBody();
+    expect(body).toContain("## Railway pages to update");
+    expect(body).toContain("### https://docs.railway.com/platform/compare-to-render");
+    expect(body).toContain("- **Copy today:** Railway stops an idle container");
+    expect(body).toContain("Replace the copy above with this, word for word:");
+    expect(body).toContain("```text\n" + proposed + "\n```");
+  });
+
+  it("says to add copy rather than swap it when the page is silent on the launch", () => {
+    const body = pageBody({ editKind: "insert" });
+    expect(body).toContain("Add this next to the copy above, word for word:");
+  });
+
+  it("says so plainly when an older analysis carries no copy", () => {
+    const body = pageBody({ proposedText: undefined });
+    expect(body).toContain("somebody has to word the edit themselves");
   });
 });
