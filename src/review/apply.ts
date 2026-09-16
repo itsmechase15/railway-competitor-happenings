@@ -9,6 +9,7 @@ import {
 } from "../github/issue.js";
 import { actionLabel, REVIEW_LABEL, REVIEW_PASS_DONE } from "../labels.js";
 import { createLogger } from "../log.js";
+import type { PageVisualMaker } from "../media/visual.js";
 import { topUpDocsForActions } from "../railway/docs.js";
 import { isMarketingTarget } from "../railway/pages.js";
 import { bestExcerpt, terms, type CorpusIndex } from "../railway/retrieval.js";
@@ -84,6 +85,13 @@ export interface ReviewPassInput {
   reviewer: Reviewer | null;
   /** Null for the same reason. A revise with no writer is left as an unconfirmed review. */
   writer: ActionWriter | null;
+  /**
+   * Draws the Before/After a rewritten page edit needs. A revise that changes
+   * the proposed copy makes the picture already on the issue a picture of copy
+   * nobody is proposing any more, so it is drawn again from the rewrite. Absent
+   * in a caller that never draws them, which leaves the rewritten issue in text.
+   */
+  visualMaker?: PageVisualMaker;
   index: CorpusIndex;
   workspace: DocsWorkspace | null;
   budget: ReviewBudget;
@@ -316,10 +324,13 @@ async function revise(
     railwayRefs: merged.refs,
   };
   const revisedAlert: AnalyzedItem = { ...alert, analysis: revised };
+  // Drawn from the rewrite, never carried over. The picture on the issue is of
+  // the copy the issue asks for, and a revise usually changes exactly that.
+  const visuals = (await input.visualMaker?.make(revisedAlert, checked.action)) ?? [];
 
   const landed = await input.editor.update(target.issue, {
     title: buildIssueTitle(revisedAlert, checked.action),
-    body: buildIssueBody(revisedAlert, input.image, checked.action),
+    body: buildIssueBody(revisedAlert, input.image, checked.action, visuals),
     labels: withLabels(
       buildIssueLabels(revisedAlert, checked.action),
       REVIEW_LABEL.revised,

@@ -140,6 +140,15 @@ export const REQUIREMENTS: Requirement[] = [
     without: "nothing – unset is the daily job's behaviour, which is to review",
   },
   {
+    name: "SKIP_PAGE_VISUALS",
+    need: "optional",
+    home: "local",
+    purpose:
+      "Stop drawing the before/after image on an update_pages issue, which is the one thing here that runs a browser and commits to the repo",
+    howToGet: "Set it to true where there is no Chromium, or to keep the repo clean of artifacts",
+    without: "nothing – unset is the daily job's behaviour, which is to draw them",
+  },
+  {
     name: "REVIEW_MAX_PER_RUN",
     need: "optional",
     home: "actions-variable",

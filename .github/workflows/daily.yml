@@ -19,8 +19,13 @@ concurrency:
   cancel-in-progress: false
 
 # Each alert links a GitHub issue holding the detail the embed no longer carries.
+#
+# `contents: write` is for one thing: an update_pages issue shows a Before/After
+# picture of the paragraph it is asking somebody to edit, and GitHub only renders
+# an image it can fetch, so the PNG is committed to artifacts/update-pages/ first.
+# Nothing else here writes to the repo.
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 jobs:
@@ -60,6 +65,15 @@ jobs:
 
       - run: npm run build
         if: steps.window.outputs.proceed == 'true'
+
+      # Draws the Before/After on an update_pages issue. A run without it still
+      # files every issue, in text, so this is not a hard requirement – it is
+      # installed explicitly rather than relying on npm's postinstall so a
+      # failure to fetch it says so here instead of at the point of drawing.
+      - name: Install Chromium for the before/after images
+        if: steps.window.outputs.proceed == 'true'
+        run: npx playwright install --with-deps chromium
+        continue-on-error: true
 
       # Fails in seconds, naming the secret and where its value comes from,
       # rather than twenty minutes in as a Postgres timeout or a silent channel.

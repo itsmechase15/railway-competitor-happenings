@@ -27,8 +27,11 @@ concurrency:
   group: competitor-happenings
   cancel-in-progress: false
 
+# `contents: write` is for the Before/After picture on an update_pages issue,
+# which is committed to artifacts/update-pages/ so GitHub can render it inline.
+# Same reason as the daily run, and the only thing here that writes to the repo.
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 jobs:
@@ -77,6 +80,13 @@ jobs:
 
       - run: npm run build
         if: steps.target.outputs.proceed == 'true'
+
+      # Same as the daily run: it draws the Before/After on an update_pages
+      # issue, and a run without it files the issue in text instead.
+      - name: Install Chromium for the before/after images
+        if: steps.target.outputs.proceed == 'true'
+        run: npx playwright install --with-deps chromium
+        continue-on-error: true
 
       # Names a missing secret before anything reaches a vendor. DRY_RUN is set
       # so the database stays optional here, as it is for the post itself.
