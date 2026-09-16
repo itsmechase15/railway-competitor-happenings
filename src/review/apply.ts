@@ -1,5 +1,6 @@
 import { checkAction } from "../analysis/analyze.js";
 import { gapQuery, type CoverageContext } from "../analysis/evidence.js";
+import { evidenceFor, renderNoAction, withNoAction } from "../analysis/noAction.js";
 import type { Config } from "../config.js";
 import {
   buildIssueBody,
@@ -21,6 +22,7 @@ import type {
   AnalyzedItem,
   FeatureImage,
   IssueRef,
+  NoAction,
   RailwayDoc,
   RailwayRef,
   RecommendedAction,
@@ -72,6 +74,11 @@ export interface ReviewTarget {
    * per verdict, and no issue is ever briefly unlabelled.
    */
   labels: string[];
+  /**
+   * The body the issue was opened with. A dropped issue keeps it under the
+   * outcome, so the verdict can be prepended without reading GitHub back.
+   */
+  body?: string;
   /** A review already recorded for this action, which refuses a second pass. */
   review?: ActionReview;
 }
@@ -110,7 +117,7 @@ export interface ReviewPassResult {
 export async function reviewActions(input: ReviewPassInput): Promise<ReviewPassResult> {
   const notes: string[] = [];
   const surviving: ActionIssue[] = [];
-  const dropped: string[] = [];
+  const dropped: DroppedAction[] = [];
 
   // The running analysis: a revise can replace a page edit and a reviewer can
   // move the impact, and the actions after it are judged against the result.
@@ -121,21 +128,26 @@ export async function reviewActions(input: ReviewPassInput): Promise<ReviewPassR
     analysis = outcome.analysis;
 
     if (outcome.kept) surviving.push(outcome.kept);
-    else if (outcome.droppedReason) dropped.push(outcome.droppedReason);
+    else if (outcome.dropped) dropped.push(outcome.dropped);
   }
 
   const actions = surviving.map((entry) => entry.action);
+  const reviewed: Analysis = { ...analysis, actions };
+
   return {
-    analysis: {
-      ...analysis,
-      actions,
-      ...(actions.length === 0 && dropped.length > 0
-        ? { noActionReason: noActionReasonFor(dropped, input.reviewer?.model) }
-        : {}),
-    },
+    analysis:
+      actions.length === 0 && dropped.length > 0
+        ? withNoAction(reviewed, droppedVerdict(dropped, input.reviewer?.model, input.index))
+        : reviewed,
     issues: surviving,
     notes,
   };
+}
+
+/** One action the reviewer closed, and what it read before closing it. */
+interface DroppedAction {
+  reason: string;
+  pages: string[];
 }
 
 /** What one action's review left behind. */
@@ -143,7 +155,7 @@ interface OneOutcome {
   analysis: Analysis;
   /** The action as it should now be read, with its issue and its review. Absent when dropped. */
   kept?: ActionIssue;
-  droppedReason?: string;
+  dropped?: DroppedAction;
 }
 
 async function reviewOne(
@@ -212,13 +224,28 @@ async function reviewOne(
 
   if (outcome.verdict === "drop") {
     notes.push(`review: dropped the ${target.action.type} action ${SPACED_EN_DASH}${outcome.reason}`);
-    await input.editor.comment(target.issue, droppedComment(outcome));
+    const pages = reviewedPages(outcome);
+    const verdict: NoAction = {
+      kind: "dropped_on_review",
+      reason: outcome.reason,
+      evidence: pages.map((url) => evidenceFor(input.index, url)),
+    };
+
+    await input.editor.comment(target.issue, droppedComment(outcome, verdict));
+    // The comment says why and the body is what a reader lands on, so the
+    // verdict goes on both. Rebuilt from the body the issue was opened with,
+    // because nothing here reads GitHub back.
+    if (target.body) {
+      await input.editor.update(target.issue, {
+        body: `## Outcome\n${renderNoAction(verdict)}\n\n${target.body}`,
+      });
+    }
     await input.editor.close(
       target.issue,
       "not_planned",
       withLabels(target.labels, REVIEW_LABEL.dropped, REVIEW_PASS_DONE),
     );
-    return { analysis, droppedReason: outcome.reason };
+    return { analysis, dropped: { reason: outcome.reason, pages } };
   }
 
   return revise(input, target, alert, outcome, review, notes);
@@ -315,7 +342,7 @@ async function revise(
 
   if (!checked.action) {
     return unconfirmed(
-      checked.notes[0] ?? "it did not survive the evidence checks, and no check said why",
+      checked.notes[0] ?? "the rewrite did not pass the checks the original was filed against",
     );
   }
 
@@ -325,8 +352,8 @@ async function revise(
     railwayRefs: merged.refs,
   };
   const revisedAlert: AnalyzedItem = { ...alert, analysis: revised };
-  // Drawn from the rewrite, never carried over. The picture on the issue is of
-  // the copy the issue asks for, and a revise usually changes exactly that.
+  // Taken from the rewrite, never carried over. The pictures on the issue are
+  // of the copy the issue asks for, and a revise usually changes exactly that.
   const visuals = (await input.visualMaker?.make(revisedAlert, checked.action)) ?? [];
 
   const landed = await input.editor.update(target.issue, {
@@ -415,8 +442,13 @@ export function withLabels(labels: string[], ...added: string[]): string[] {
   return [...new Set([...labels, ...added])];
 }
 
+/** Every page one review names, whether it opened it or cited it. */
+function reviewedPages(outcome: ReviewOutcome): string[] {
+  return [...new Set([...outcome.readUrls, ...outcome.pagesChecked])];
+}
+
 function pagesLine(outcome: ReviewOutcome, heading: string): string {
-  const pages = [...new Set([...outcome.readUrls, ...outcome.pagesChecked])];
+  const pages = reviewedPages(outcome);
   if (pages.length === 0) return `${heading} none. It read no page it could name.`;
   return `${heading}\n${pages.map((url) => `- ${url}`).join("\n")}`;
 }
@@ -431,11 +463,13 @@ function agreedComment(outcome: ReviewOutcome): string {
   ].join("\n");
 }
 
-function droppedComment(outcome: ReviewOutcome): string {
+function droppedComment(outcome: ReviewOutcome, verdict: NoAction): string {
   return [
     `Reviewed by \`${outcome.model}\`: dropped${SPACED_EN_DASH}${outcome.reason}`,
     "",
-    pagesLine(outcome, "Pages that show Railway already covers this:"),
+    renderNoAction(verdict),
+    "",
+    pagesLine(outcome, "Pages the reviewer read:"),
     "",
     "Closed as not planned, and left out of the Discord alert. If the pages above are out of date, that is a docs fix rather than a reason to reopen this.",
   ].join("\n");
@@ -517,7 +551,27 @@ function revisedComment(
   ].join("\n");
 }
 
-function noActionReasonFor(dropped: string[], model: string | undefined): string {
-  const by = model ? ` by \`${model}\`` : "";
-  return `Every recommended action here was dropped on review${by}, because Railway already covers this. ${dropped.join(" ")}`;
+/**
+ * Why an alert whose every action was dropped asks for nothing.
+ *
+ * The reviewer's own words, not a summary of them. It read the corpus and said
+ * why it closed each issue, and asserting some other reason on its behalf – this
+ * used to say "because Railway already covers this" whatever the reviewer had
+ * found – is exactly the platitude the verdict exists to stop.
+ */
+function droppedVerdict(
+  dropped: DroppedAction[],
+  model: string | undefined,
+  index: CorpusIndex,
+): NoAction {
+  const by = model ? `\`${model}\`` : "The reviewer";
+  const what =
+    dropped.length === 1 ? "the one action filed here" : `all ${dropped.length} actions filed here`;
+  const pages = [...new Set(dropped.flatMap((entry) => entry.pages))];
+
+  return {
+    kind: "dropped_on_review",
+    reason: `${by} read Railway's docs and closed ${what}. ${dropped.map((entry) => entry.reason).join(" ")}`,
+    evidence: pages.map((url) => evidenceFor(index, url)),
+  };
 }

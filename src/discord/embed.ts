@@ -1,4 +1,5 @@
 import { FALLBACK_MODEL } from "../analysis/fallback.js";
+import { noActionOf, renderNoAction } from "../analysis/noAction.js";
 import { COMPETITORS } from "../config.js";
 import { actionTitleParts, IMPACT_COLOR, IMPACT_LABEL, SOURCE_LABEL } from "../labels.js";
 import { isMarketingTarget } from "../railway/pages.js";
@@ -189,24 +190,26 @@ export function actionEntries(alert: Alert): ActionIssue[] {
   }));
 }
 
-/** What the action field says when there is nothing to do. */
-export const NO_ACTION_TITLE = "None";
-const FALLBACK_NO_ACTION_REASON =
-  "Nothing here asks anything of Railway, and no reason was recorded.";
+/**
+ * How much of the verdict's sentence the field holds, with room left for the
+ * title above it and the docs links below.
+ */
+const MAX_NO_ACTION_CHARS = EMBED_LIMITS.fieldValue - 400;
 
 /**
  * Zero actions rendered as an answer rather than as a blank.
  *
  * A launch that asks nothing of Railway is a normal outcome and a useful one:
- * it says somebody looked. An empty field would read as a broken alert, and a
- * missing field would read as an alert nobody finished, so the reason goes
- * where the actions would have been.
+ * it says somebody looked. What makes it useful is the specifics, so the title
+ * says which kind of nothing this is, the sentence names the capability and
+ * what Railway does about it, and the docs pages it rests on are linked. See
+ * `src/analysis/noAction.ts`, which every surface renders the verdict through.
  */
 export function noActionValue(alert: Alert): string {
-  const reason = alert.analysis.noActionReason?.trim() || FALLBACK_NO_ACTION_REASON;
-  return [`**${NO_ACTION_TITLE}**`, escape(truncate(reason, EMBED_LIMITS.fieldValue - 40))].join(
-    "\n",
-  );
+  return renderNoAction(noActionOf(alert.analysis), {
+    escape,
+    maxChars: MAX_NO_ACTION_CHARS,
+  });
 }
 
 /** How much of Discord's 6000-character budget an embed spends. */

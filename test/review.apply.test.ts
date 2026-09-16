@@ -503,16 +503,41 @@ describe("drop", () => {
 
     expect(result.analysis.actions).toEqual([]);
     expect(result.issues).toEqual([]);
-    expect(result.analysis.noActionReason).toContain(
+    // The reviewer's own words, and the page it read them off.
+    expect(result.analysis.noAction?.kind).toBe("dropped_on_review");
+    expect(result.analysis.noAction?.reason).toContain(
       "Railway already stops an idle container and charges nothing for it.",
     );
+    expect(result.analysis.noAction?.evidence.map((page) => page.url)).toEqual([SERVERLESS]);
+    expect(result.analysis.noActionReason).toBe(result.analysis.noAction?.reason);
 
     const closed = editor.edits.find((edit) => edit.kind === "close");
     expect(closed?.reason).toBe("not_planned");
     expect(closed?.labels).toContain(REVIEW_LABEL.dropped);
     expect(closed?.labels).toContain(REVIEW_PASS_DONE);
-    expect(editor.comments[0]).toContain("Pages that show Railway already covers this:");
+    expect(editor.comments[0]).toContain("**None – dropped on review**");
+    expect(editor.comments[0]).toContain("Pages the reviewer read:");
     expect(editor.comments[0]).toContain(SERVERLESS);
+  });
+
+  /**
+   * The comment says why and the body is what a reader lands on, so a closed
+   * issue carries the verdict above the recommendation it no longer asks for.
+   */
+  it("puts the verdict above the body of the issue it closed", async () => {
+    const { editor } = await run({
+      reviewer: fakeReviewer("drop", {
+        reason: "Railway already stops an idle container and charges nothing for it.",
+        pagesChecked: [SERVERLESS],
+      }),
+      targets: [
+        { action: filed, issue, labels: openedLabels, body: "## What changed\nRender did a thing." },
+      ],
+    });
+
+    const rewritten = editor.edits.find((edit) => edit.kind === "update" && edit.patch?.body);
+    expect(rewritten?.patch?.body).toContain("## Outcome\n**None – dropped on review**");
+    expect(rewritten?.patch?.body).toContain("## What changed\nRender did a thing.");
   });
 
   it("keeps the actions it agreed with when it drops one of several", async () => {

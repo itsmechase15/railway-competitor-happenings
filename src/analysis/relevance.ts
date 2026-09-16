@@ -3,6 +3,7 @@ import { isMarketingTarget } from "../railway/pages.js";
 import { matchCapabilities, matchProducts } from "../railway/products.js";
 import type { Analysis, RecommendedAction, StoredItem } from "../types.js";
 import { firstSentence, stem, WORD_PATTERN } from "../util/text.js";
+import { withNoAction } from "./noAction.js";
 
 /**
  * Is a page edit about the thing that shipped?
@@ -177,14 +178,19 @@ export function enforceUpdatePagesTopic(analysis: Analysis, item: StoredItem): T
 
   if (actions.length === analysis.actions.length) return { analysis, notes: [] };
 
-  const openQuestions = [...analysis.openQuestions];
-  if (actions.length === 0 && openQuestions.length < 3) {
-    openQuestions.push(
-      `No Railway page in context is wrong or understated because of this, so this alert asks for no page edit. Worth checking whether any Railway page should cover ${describeTopic(topic)} at all.`,
-    );
-  }
+  if (actions.length > 0) return { analysis: { ...analysis, actions }, notes };
 
-  return { analysis: { ...analysis, actions, openQuestions }, notes };
+  return {
+    analysis: withNoAction(
+      { ...analysis, actions },
+      {
+        kind: "not_a_gap",
+        reason: `No Railway page in context is wrong or understated because of this, and the only edit the analysis asked for is about something other than ${describeTopic(topic)}, so there is no page to fix here.`,
+        evidence: [],
+      },
+    ),
+    notes,
+  };
 }
 
 /**
@@ -213,7 +219,19 @@ export function enforcePageTargets(analysis: Analysis): TopicGuard {
     );
 
   const actions = analysis.actions.filter((action) => !isPageAction(action));
-  return { analysis: { ...analysis, actions }, notes };
+  if (actions.length > 0) return { analysis: { ...analysis, actions }, notes };
+
+  return {
+    analysis: withNoAction(
+      { ...analysis, actions },
+      {
+        kind: "not_a_gap",
+        reason: `The only page edit the analysis asked for lands on ${edits.map((ref) => ref.url).join(" and ")}, which are product docs pages: the docs are evidence of what Railway ships, not copy anyone is asked to change, so there is no page edit here.`,
+        evidence: [],
+      },
+    ),
+    notes,
+  };
 }
 
 /**

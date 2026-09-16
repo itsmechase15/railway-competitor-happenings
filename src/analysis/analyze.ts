@@ -212,9 +212,11 @@ export async function analyzeItems(
       for (const url of [...docs.map((doc) => doc.url), ...reply.readUrls]) usedUrls.add(url);
       analyzed.push({ item, analysis, model: analyzer.model, docs: grounded });
 
-      const actions = analysis.actions.map((action) => action.type).join(", ");
+      const actions =
+        analysis.actions.map((action) => action.type).join(", ") ||
+        `no action (${analysis.noAction?.kind ?? "unverified"})`;
       log.info(
-        `analyzed ${item.competitor}/${item.source} "${item.title}" against ${context.index.size} corpus pages, ${reply.readUrls.length} read by the analyst → ${actions || "no action"}`,
+        `analyzed ${item.competitor}/${item.source} "${item.title}" against ${context.index.size} corpus pages, ${reply.readUrls.length} read by the analyst → ${actions}`,
       );
     } catch (error) {
       log.error(`giving up on ${item.url}`, error instanceof Error ? error.message : String(error));
