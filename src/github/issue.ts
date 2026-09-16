@@ -284,6 +284,12 @@ function bullets(values: string[], empty: string): string {
  * The long form of one recommended action. Everything the embed cannot carry –
  * the full detail, page citations, suggested edits, open questions – lives
  * here, scoped to the one job this issue is asking for.
+ *
+ * The order is what a reader needs in the order they need it: what happened,
+ * then what to do about it, then who it is for. Somebody who reads that far and
+ * closes the tab has the whole point of the issue, so everything that justifies
+ * the action – the gap, the impact scale, the cited pages – comes after all
+ * three rather than between them.
  */
 export function buildIssueBody(
   alert: AnalyzedItem,
@@ -297,10 +303,10 @@ export function buildIssueBody(
   const sections = [
     `**${competitor.label}** · ${SOURCE_LABEL[item.source]} · published ${published} · impact **${IMPACT_LABEL[analysis.impact]}** · owned by **${actionOwner(action)}**`,
     image ? `<img src="${image.url}" alt="${image.altText}" width="720" />` : null,
-    `## Recommended action\n**${actionLabel(action)}**${SPACED_EN_DASH}${action.detail}`,
-    evidenceSection(action),
-    `## Related team(s)\n${teamsSection(action)}`,
     `## What you need to know\n${analysis.summary}`,
+    `## Recommended action\n**${actionLabel(action)}**${SPACED_EN_DASH}${action.detail}`,
+    `## Related team(s)\n${teamsSection(action)}`,
+    evidenceSection(action),
     `## Impact\n${impactScale(analysis.impact)}`,
     `## More detail\n${bullets(analysis.keyPoints, "The source gave nothing beyond the summary above.")}`,
     pagesSection(alert, action),

@@ -294,3 +294,62 @@ describe("the team on an issue", () => {
     expect(body).not.toContain("\u2014");
   });
 });
+/**
+ * Chase reads the issue top down and stops when he has the point: what
+ * happened, then what to do about it. Everything that justifies the action
+ * comes after both.
+ */
+describe("the order an issue reads in", () => {
+  const cdnAction: RecommendedAction = {
+    type: "consider_enhancing",
+    feature: "CDN",
+    detail: "Add stale-while-revalidate to the CDN.",
+    gap: "no stale-while-revalidate on cached assets",
+    evidenceUrl: "https://docs.railway.com/networking/cdn",
+    evidenceQuote: "Railway caches static assets at the edge.",
+  };
+
+  const body = (): string =>
+    buildIssueBody(
+      alert({ item: storedItem(), analysis: analysis({ actions: [cdnAction] }) }),
+      featureImage(),
+      cdnAction,
+    );
+
+  const headingOrder = (text: string): string[] =>
+    text
+      .split("\n")
+      .filter((line) => line.startsWith("## "))
+      .map((line) => line.slice(3));
+
+  it("leads with what you need to know, then the action, then the teams", () => {
+    expect(headingOrder(body()).slice(0, 3)).toEqual([
+      "What you need to know",
+      "Recommended action",
+      "Related team(s)",
+    ]);
+  });
+
+  it("keeps the metadata line and the image above all of it", () => {
+    const text = body();
+    expect(text.indexOf("published 2026-08-26")).toBeLessThan(
+      text.indexOf("## What you need to know"),
+    );
+    expect(text.indexOf("<img src=")).toBeLessThan(text.indexOf("## What you need to know"));
+  });
+
+  it("puts the evidence, the impact, and the detail after the action", () => {
+    const headings = headingOrder(body());
+    expect(headings).toEqual([
+      "What you need to know",
+      "Recommended action",
+      "Related team(s)",
+      "The gap this closes",
+      "Impact",
+      "More detail",
+      "Railway docs for context",
+      "Open questions",
+      "Sources",
+    ]);
+  });
+});

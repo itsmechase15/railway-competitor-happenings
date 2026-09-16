@@ -340,14 +340,18 @@ from the bot.
 
 One issue per action that passed every check, in this repo, opened before the
 embed so every action has a link. An alert with no surviving action opens
-nothing. Title `Competitor: feature – Action`. Body carries the action in
-full, the gap it closes with the docs page it was read off and the line quoted
-from it, the teams it is for, summary, detail, the whole impact scale with this
-level checked, open questions, sources, and the image. Product issues cite the
-docs that back the action and end with the docs that would change if Railway
-ships it. Marketing issues carry url + copy today + what the edit does + the
-copy to paste, in a code block, labeled as a replacement for the quoted line or
-as an insert next to it.
+nothing. Title `Competitor: feature – Action`.
+
+The body reads in the order a reader needs it. Metadata line and image, then
+**what you need to know**, then the **recommended action**, then the teams it is
+for. Somebody who reads that far and closes the tab has the whole point of the
+issue. Everything that justifies the action comes after all three: the gap it
+closes with the docs page it was read off and the line quoted from it, the whole
+impact scale with this level checked, the detail bullets, the cited pages, open
+questions, and sources. Product issues cite the docs that back the action and
+end with the docs that would change if Railway ships it. Marketing issues carry
+url + copy today + what the edit does + the copy to paste, in a code block,
+labeled as a replacement for the quoted line or as an insert next to it.
 
 Labels: `competitor-happenings`, `render|vercel`, `source:<label>`,
 `impact:<level>`, `action:<action>`, `owner:product|marketing`, one to three
