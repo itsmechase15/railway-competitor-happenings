@@ -72,6 +72,46 @@ its own, with the **corpus underneath it**, whose rewrite is **re-checked by
 code** rather than by another model, **once**. Take away any one of those and it
 becomes the pass [AGENTS.md](./AGENTS.md) rules out.
 
+## Who each issue is for
+
+`owner:product` says a roadmap owns the work and names nobody. Railway does not
+publish team pages, but [railway.com/about](https://railway.com/about) publishes
+its people with a title under each name, and the titles are the org: twelve
+Infrastructure Engineers, seven Product Engineers, four Support Engineers, four
+Solutions Engineers, and single people carrying brand, ops, talent, and agentic
+experience. So every issue also carries one to three `team:` labels and names
+those teams in its body.
+
+| Team | Slug | Routed the work it builds |
+| --- | --- | --- |
+| Infrastructure Engineering | `infrastructure-engineering` | Deployments, builds, scaling, serverless, databases, volumes, networking, domains, the CDN, the WAF, observability |
+| Product Engineering | `product-engineering` | Environments, variables, cron jobs, functions, config and infrastructure as code, templates, the CLI, the public API, pricing and cost control, enterprise and compliance |
+| Support Engineering | `support-engineering` | Tickets, escalations, incident response |
+| Solutions Engineering | `solutions-engineering` | Migrations off a competitor, proofs of concept, reference architectures |
+| Customer Success | `customer-success` | Renewals, account health, adoption |
+| Marketing | `marketing` | The compare, migrate, pricing, and features pages, positioning, launch posts |
+| Design | `design` | The design system and the interface |
+| Developer Relations | `developer-relations` | Tutorials, templates, sample apps, community |
+| Agentic Experience | `agentic-experience` | Railway Agent, the MCP server, cloud agents |
+| Operations | `operations` | Internal process, vendors, policy |
+| Talent | `talent` | Hiring |
+| Logistics | `logistics` | Shipping, hardware, swag, events |
+
+The analyst chooses, because it is the only reader with the whole signal in
+front of it, and the prompt gives it every name and what each one owns. Its
+answer is a suggestion, not an instruction: each name is looked up in the
+catalog, and one that is not on the about page is dropped rather than mapped to
+something near it. "Product", "Engineering", and "Inference Engineering" all get
+nothing back. What is left falls through to who owns the surface the action
+names, then to the team vocabulary in the action's own words, then to a default
+of Marketing for a page edit and Product Engineering for anything else.
+
+Three is the cap, and it is a real one: a list of teams that long names none of
+them. The `owner:` label stays, because a team is not a desk, and there is no
+`team:` for the CEO or for Head of Engineering. Refreshing any of this means
+reading the about page again and editing
+[`src/railway/teams.ts`](./src/railway/teams.ts).
+
 ## Sources
 
 | Competitor | Read | Not read |
@@ -262,6 +302,8 @@ off when you are iterating on something else.
 | `src/railway/workspace.ts` | The corpus as markdown on disk, plus the table of contents |
 | `src/railway/products.ts` | The catalog: naming, routing, and boosting overview pages |
 | `src/railway/pages.ts` | What a page action may target |
+| `src/railway/teams.ts` | Railway's teams, read off the titles on the about page, and what each one builds |
+| `src/teams.ts` | Which of them an action is for: the model's answer, then who owns the surface, then a default |
 | `src/analysis/analyst.ts` | One analyst run, read-only, with the files it opened recorded |
 | `src/analysis/evidence.ts` | The gate: citations, quotes, the coverage check, page edits |
 | `src/analysis/` | The prompt, the reply schema, the docs-grounding guards, and the no-key fallback |

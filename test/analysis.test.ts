@@ -45,6 +45,40 @@ describe("reading a model reply", () => {
     expect(snake.openQuestions).toEqual(["Pricing?"]);
   });
 
+  it("keeps the teams a model named for an action, in its own words", () => {
+    const verdict = parseAnalysis(
+      JSON.stringify({
+        impact: "notable",
+        summary: "Render shipped stale-while-revalidate.",
+        actions: [
+          {
+            type: "consider_enhancing",
+            feature: "CDN",
+            detail: "Add stale-while-revalidate to the CDN.",
+            // The catalog decides which of these is a real team, not the parser.
+            railway_teams: ["Infrastructure Engineering", " Marketing ", "", "Inference Engineering"],
+          },
+        ],
+      }),
+    );
+    expect(verdict.actions[0]?.teams).toEqual([
+      "Infrastructure Engineering",
+      "Marketing",
+      "Inference Engineering",
+    ]);
+  });
+
+  it("leaves teams off an action the model routed nowhere", () => {
+    const verdict = parseAnalysis(
+      JSON.stringify({
+        impact: "notable",
+        summary: "Render raised a limit.",
+        actions: [{ type: "update_pages", detail: "On the compare page, say so.", teams: [] }],
+      }),
+    );
+    expect(verdict.actions[0]?.teams).toBeUndefined();
+  });
+
   it("reads a field the model sent as an empty string as absent", () => {
     const verdict = parseAnalysis(
       JSON.stringify({

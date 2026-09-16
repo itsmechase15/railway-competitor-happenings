@@ -22,6 +22,13 @@ export interface RecommendedAction {
    */
   feature?: string;
   /**
+   * The Railway teams the model thinks are most involved, by name. Read as a
+   * suggestion: every name is looked up in the catalog before anything renders
+   * it, so a team that is not on railway.com/about is dropped. See
+   * `src/teams.ts`.
+   */
+  teams?: string[];
+  /**
    * What Railway does not do today, in one line. Required for the two product
    * actions: an enhancement with no gap named is a suggestion nobody can check.
    */

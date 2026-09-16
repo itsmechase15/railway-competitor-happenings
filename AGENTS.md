@@ -56,7 +56,14 @@ every gap claim being dropped for want of anything to check it against.
   and it becomes the forbidden pass. See [`src/review/`](./src/review/) and the
   [Review section of PLAN.md](./PLAN.md#review-every-action-once).
 - **Zero actions is a normal answer**, rendered as **None** with a reason. Do
-  not reintroduce a rule that an alert has to recommend something.
+ not reintroduce a rule that an alert has to recommend something.
+- **A team is read off the about page, never invented.** Every entry in
+ [`src/railway/teams.ts`](./src/railway/teams.ts) is the group of employee titles
+ [railway.com/about](https://railway.com/about) lists, which is why there is no
+ Inference Engineering, no CEO, and no emoji: Railway publishes none of the
+ three. A model's suggested team is looked up there and dropped when it is not
+ found, so adding a fallback that maps an invented name to the nearest real team
+ undoes the whole check. Refreshing means re-reading the page.
 - **Discord only.** No Slack, and nothing shared with
   [posthog-competitor-happenings](https://github.com/itsmechase15/posthog-competitor-happenings):
   same product pattern, separate code, database, and secrets.
