@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { enforceActionLead } from "../src/analysis/lead.js";
 import { enforceUpdatePagesTopic } from "../src/analysis/relevance.js";
+import { UNSTATED_NO_ACTION_REASON } from "../src/analysis/noAction.js";
 import {
   extractJsonObject,
   parseAnalysis,
   parseStoredAlert,
   serializeAlertPayload,
-  UNSTATED_NO_ACTION_REASON,
 } from "../src/analysis/schema.js";
 import { claimsGap, verifyAgainstDocs } from "../src/analysis/verify.js";
 import type { RailwayDoc, RecommendedAction } from "../src/types.js";
@@ -104,9 +104,57 @@ describe("reading a model reply", () => {
     expect(verdict.noActionReason).toBe(
       "This ships nothing, so there is nothing for Railway to answer.",
     );
+    // A bare sentence is a verdict nobody confirmed, whatever it asserts.
+    expect(verdict.noAction?.kind).toBe("unverified");
   });
 
-  it("says so when a reply recommends nothing and does not say why", () => {
+  it("reads a structured verdict as written, with the pages under it", () => {
+    const verdict = parseAnalysis(
+      JSON.stringify({
+        impact: "notable",
+        summary: "Render raised the memory ceiling on its existing compute plans.",
+        actions: [],
+        no_action: {
+          kind: "already_covered",
+          reason: "Railway already offers memory-heavy plan shapes on every tier.",
+          evidence: [
+            {
+              url: "https://docs.railway.com/deployments/scaling",
+              quote: "Railway scales a service vertically and horizontally.",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(verdict.noAction).toEqual({
+      kind: "already_covered",
+      reason: "Railway already offers memory-heavy plan shapes on every tier.",
+      evidence: [
+        {
+          url: "https://docs.railway.com/deployments/scaling",
+          quote: "Railway scales a service vertically and horizontally.",
+        },
+      ],
+    });
+    expect(verdict.noActionReason).toBe(verdict.noAction?.reason);
+  });
+
+  it("keeps the sentence but not the title when a model invents a kind", () => {
+    const verdict = parseAnalysis(
+      JSON.stringify({
+        impact: "minor",
+        summary: "Render wrote a post.",
+        actions: [],
+        no_action: { kind: "railway_is_fine", reason: "Railway ships this already." },
+      }),
+    );
+
+    expect(verdict.noAction?.kind).toBe("unverified");
+    expect(verdict.noAction?.reason).toBe("Railway ships this already.");
+  });
+
+  it("says which part is missing when a reply recommends nothing and offers no verdict", () => {
     const verdict = parseAnalysis(
       JSON.stringify({ impact: "minor", summary: "Render wrote a post.", actions: [] }),
     );
@@ -315,7 +363,7 @@ describe("keeping a page edit on this launch's topic", () => {
     expect(notes[0]).toContain("dropped an update_pages action");
   });
 
-  it("says so as an open question when dropping it empties the alert", () => {
+  it("says which kind of nothing it is when dropping it empties the alert", () => {
     const { analysis: guarded } = enforceUpdatePagesTopic(
       analysis({
         summary: "Render added memory-optimized compute plans and a 12-CPU tier.",
@@ -327,7 +375,9 @@ describe("keeping a page edit on this launch's topic", () => {
       }),
       item,
     );
-    expect(guarded.openQuestions[0]).toContain("asks for no page edit");
+    expect(guarded.noAction?.kind).toBe("not_a_gap");
+    expect(guarded.noAction?.reason).toContain("No Railway page in context is wrong");
+    expect(guarded.noActionReason).toBe(guarded.noAction?.reason);
   });
 
   it("keeps a page edit that is about the thing that shipped", () => {

@@ -140,6 +140,13 @@ export function heuristicAnalysis(
     summary,
     keyPoints: pointsFrom(lead, item),
     actions: [],
+    noAction: {
+      kind: "unanalyzed",
+      reason: NO_ANALYSIS_REASON,
+      // The pages a person would start from, which is the most an unanalyzed
+      // run can offer: it has read none of them against this launch.
+      evidence: docRefs.map((ref) => ({ url: ref.url })),
+    },
     noActionReason: NO_ANALYSIS_REASON,
     railwayRefs: [...refs, ...docRefs],
     openQuestions: unverifiedQuestions(competitor.label, page, docRefs[0]?.url),

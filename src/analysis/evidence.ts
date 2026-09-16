@@ -1,8 +1,16 @@
 import { isMarketingTarget } from "../railway/pages.js";
 import { matchProducts } from "../railway/products.js";
 import { terms, type CorpusIndex, type RetrievalHit } from "../railway/retrieval.js";
-import type { Analysis, RailwayRef, RecommendedAction } from "../types.js";
+import type {
+  Analysis,
+  NoAction,
+  NoActionEvidence,
+  NoActionKind,
+  RailwayRef,
+  RecommendedAction,
+} from "../types.js";
 import { firstSentence, truncate } from "../util/text.js";
+import { evidenceFor, noActionOf, withNoAction } from "./noAction.js";
 
 /**
  * The checks an action has to survive before anyone is asked to do it.
@@ -235,11 +243,43 @@ export function coverageMisses(
   return { misses, strong };
 }
 
+/**
+ * What stopped an action, as a token rather than as a sentence.
+ *
+ * The sentence says it best to a person and says nothing to code, and the
+ * difference between "Railway already ships this" and "we could not check
+ * whether Railway ships this" is the whole difference between the two answers
+ * an empty alert can give. So every block carries which one it was.
+ */
+export const BLOCK_CAUSES = [
+  /** The corpus holds pages about the gap that the analysis never opened. */
+  "covered_elsewhere",
+  /** The gap's own words rank other pages above the one it cites. */
+  "wrong_page_ranked",
+  "packaging",
+  "docs_only",
+  "no_gap",
+  "no_evidence",
+  "not_in_corpus",
+  "not_docs",
+  "no_quote",
+  "quote_missing",
+  "page_edit_no_page",
+  "page_edit_no_edit",
+  "page_edit_no_copy",
+  "page_edit_unusable",
+  "page_edit_stale_claim",
+] as const;
+export type BlockCause = (typeof BLOCK_CAUSES)[number];
+
 /** One action that will not be filed, and what a reader should be told instead. */
 export interface BlockedAction {
   action: RecommendedAction;
+  cause: BlockCause;
   /** Why, in the words the open question uses. */
   reason: string;
+  /** The pages the cause is about, when it is about pages. */
+  urls: string[];
   /** The same, shorter, for the run log. */
   note: string;
 }
@@ -251,10 +291,17 @@ export interface GateResult {
   notes: string[];
 }
 
-function block(action: RecommendedAction, reason: string): BlockedAction {
+function block(
+  action: RecommendedAction,
+  cause: BlockCause,
+  reason: string,
+  urls: string[] = [],
+): BlockedAction {
   return {
     action,
+    cause,
     reason,
+    urls,
     note: `blocked a ${action.type} action: ${reason} ("${firstSentence(action.detail, 100)}")`,
   };
 }
@@ -271,18 +318,25 @@ function checkEvidence(
   if (!action.gap) {
     return block(
       action,
+      "no_gap",
       "it does not say what Railway cannot do today, so there is nothing to check",
     );
   }
   if (!action.evidenceUrl) {
-    return block(action, `it cites no Railway docs page for the gap "${truncate(action.gap, 120)}"`);
+    return block(
+      action,
+      "no_evidence",
+      `it cites no Railway docs page for the gap "${truncate(action.gap, 120)}"`,
+    );
   }
 
   const page = context.index.page(action.evidenceUrl);
   if (!page) {
     return block(
       action,
+      "not_in_corpus",
       `it cites ${action.evidenceUrl}, which is not a page in Railway's docs corpus`,
+      [action.evidenceUrl],
     );
   }
   if (page.kind !== "docs") {
@@ -290,15 +344,24 @@ function checkEvidence(
       page.kind === "changelog"
         ? "a changelog entry says something shipped, which is the opposite of evidence for a gap"
         : "marketing copy is written on some past date and is never evidence about the product";
-    return block(action, `its evidence is ${action.evidenceUrl}, and ${why}`);
+    return block(action, "not_docs", `its evidence is ${action.evidenceUrl}, and ${why}`, [
+      action.evidenceUrl,
+    ]);
   }
   if (!action.evidenceQuote) {
-    return block(action, `it cites ${action.evidenceUrl} without quoting what the page says`);
+    return block(
+      action,
+      "no_quote",
+      `it cites ${action.evidenceUrl} without quoting what the page says`,
+      [action.evidenceUrl],
+    );
   }
   if (!quoteAppearsOn(action.evidenceQuote, page.text)) {
     return block(
       action,
+      "quote_missing",
       `its quote is not on ${action.evidenceUrl}: the stored copy of that page does not contain "${truncate(action.evidenceQuote, 120)}"`,
+      [action.evidenceUrl],
     );
   }
   return null;
@@ -319,13 +382,19 @@ function checkPageAction(
   if (editable.length === 0) {
     return block(
       action,
+      "page_edit_no_page",
       "it names no Railway compare, migrate, pricing, or features page to edit",
     );
   }
 
   const withEdit = editable.find((ref) => ref.suggestedEdit);
   if (!withEdit) {
-    return block(action, "it names a page but not what the page should say instead");
+    return block(
+      action,
+      "page_edit_no_edit",
+      "it names a page but not what the page should say instead",
+      editable.map((ref) => ref.url),
+    );
   }
 
   // The copy is the recommendation. A page edit that arrives as "mention the
@@ -340,7 +409,9 @@ function checkPageAction(
     const worst = faults.find((fault) => fault !== "missing") ?? "missing";
     return block(
       action,
+      worst === "missing" ? "page_edit_no_copy" : "page_edit_unusable",
       `${COPY_FAULT_REASON[worst]} (${editable.map((ref) => ref.url).join(" or ")})`,
+      editable.map((ref) => ref.url),
     );
   }
 
@@ -348,7 +419,9 @@ function checkPageAction(
   if (!verified) {
     return block(
       action,
+      "page_edit_stale_claim",
       `the copy it quotes is not on ${editable.map((ref) => ref.url).join(" or ")} as stored, so the page may already say something else`,
+      editable.map((ref) => ref.url),
     );
   }
   return null;
@@ -386,27 +459,29 @@ export function gateActions(analysis: Analysis, context: CoverageContext): GateR
     return false;
   });
 
-  if (blocked.length === 0) return { analysis, blocked, notes };
-
-  const openQuestions = [...analysis.openQuestions];
-  for (const entry of blocked) {
-    if (openQuestions.length >= 4) break;
-    openQuestions.push(entry.reason);
+  if (blocked.length === 0) {
+    // The analyst's own verdict is a claim about what Railway ships, so it is
+    // checked here too rather than published on trust.
+    if (analysis.actions.length > 0) return { analysis, blocked, notes };
+    const verdict = checkNoActionEvidence(analysis, context.index);
+    return { analysis: verdict.analysis, blocked, notes: verdict.notes };
   }
 
+  // What blocked the last action is the answer to "so why is this empty?", and
+  // saying it as the verdict and again as an open question reads as two
+  // findings rather than one.
+  const openQuestions = [...analysis.openQuestions];
+  if (kept.length > 0) {
+    for (const entry of blocked) {
+      if (openQuestions.length >= 4) break;
+      openQuestions.push(entry.reason);
+    }
+  }
+
+  const gated: Analysis = { ...analysis, actions: kept, openQuestions };
+
   return {
-    analysis: {
-      ...analysis,
-      actions: kept,
-      openQuestions,
-      ...(kept.length === 0
-        ? {
-            noActionReason:
-              analysis.noActionReason ??
-              "Nothing here survived the evidence checks, so this alert asks for no work. The open questions say what could not be verified.",
-          }
-        : {}),
-    },
+    analysis: kept.length === 0 ? withNoAction(gated, noActionFrom(blocked, context.index)) : gated,
     blocked,
     notes,
   };
@@ -415,6 +490,7 @@ export function gateActions(analysis: Analysis, context: CoverageContext): GateR
     if (isDocumentationOnlyAction(action)) {
       return block(
         action,
+        "docs_only",
         "it asks for the docs to be written rather than for anything to change, which is not one of this bot's actions",
       );
     }
@@ -429,6 +505,7 @@ export function gateActions(analysis: Analysis, context: CoverageContext): GateR
     if (isPackagingGap(action)) {
       return block(
         action,
+        "packaging",
         `its gap is about what a competitor charges rather than what Railway can do: "${truncate(action.gap ?? "", 120)}"`,
       );
     }
@@ -439,24 +516,166 @@ export function gateActions(analysis: Analysis, context: CoverageContext): GateR
     const { misses, strong } = coverageMisses(action, context, citedUrls);
     const cited = action.evidenceUrl ?? "";
     if (strong.length > 0 && !strong.some((hit) => hit.url === cited)) {
+      const ranked = strong.slice(0, 2).map((hit) => hit.url);
       return block(
         action,
-        `the gap it names does not lead to the page it cites: searching the docs for "${truncate(action.gap ?? "", 80)}" ranks ${strong
-          .slice(0, 2)
-          .map((hit) => hit.url)
-          .join(" and ")} above ${cited}`,
+        "wrong_page_ranked",
+        `the gap it names does not lead to the page it cites: searching the docs for "${truncate(action.gap ?? "", 80)}" ranks ${ranked.join(" and ")} above ${cited}`,
+        ranked,
       );
     }
     if (misses.length > 0) {
+      const unread = misses.slice(0, 3).map((miss) => miss.url);
       return block(
         action,
-        `the docs cover this in pages the analysis never opened: ${misses
-          .slice(0, 3)
-          .map((miss) => miss.url)
-          .join(", ")}. Read those before treating "${truncate(action.gap ?? "", 80)}" as a gap`,
+        "covered_elsewhere",
+        `the docs cover this in pages the analysis never opened: ${unread.join(", ")}. Read those before treating "${truncate(action.gap ?? "", 80)}" as a gap`,
+        unread,
       );
     }
 
     return null;
   }
+}
+
+/** The kind of verdict one blocked action argues for. */
+function kindForCause(cause: BlockCause): NoActionKind {
+  switch (cause) {
+    case "covered_elsewhere":
+    case "wrong_page_ranked":
+      return "already_covered";
+    case "packaging":
+    case "docs_only":
+      return "not_a_gap";
+    case "no_gap":
+    case "no_evidence":
+    case "not_in_corpus":
+    case "not_docs":
+    case "no_quote":
+    case "quote_missing":
+    case "page_edit_no_page":
+    case "page_edit_no_edit":
+    case "page_edit_no_copy":
+    case "page_edit_unusable":
+    case "page_edit_stale_claim":
+      return "unverified";
+    default: {
+      const exhaustive: never = cause;
+      return exhaustive;
+    }
+  }
+}
+
+/** What "Railway already does this" rests on, in the words of the check that said so. */
+function coveredReason(entry: BlockedAction, evidence: NoActionEvidence[]): string {
+  const pages = evidence.map((page) => page.title ?? page.url).join(" and ");
+  const gap = truncate(entry.action.gap ?? "", 120);
+
+  if (entry.cause === "wrong_page_ranked") {
+    return `Railway documents this already: searching the docs for "${gap}" ranks ${pages} above the page the analysis read it off.`;
+  }
+  return `Railway documents this already: the docs cover "${gap}" on ${pages}, which the analysis never opened.`;
+}
+
+function notAGapReason(blocked: BlockedAction[]): string {
+  const packaging = blocked.find((entry) => entry.cause === "packaging");
+  if (packaging) {
+    return `The only thing recommended was about what a competitor charges rather than what Railway can do ("${truncate(packaging.action.gap ?? "", 120)}"), and pricing is not a capability Railway is missing.`;
+  }
+  return "The only thing recommended was writing docs about something Railway already ships, which is a docs job rather than a product gap.";
+}
+
+/**
+ * The verdict, read off what the gate blocked.
+ *
+ * Coverage wins over everything else, because "Railway already does this" is
+ * the answer a reader is looking for and the one the whole bot exists to get
+ * right. A run of pricing complaints is not a gap at all. Anything else is a
+ * gap somebody claimed and nobody could confirm, which is its own answer and
+ * says which check it failed.
+ */
+export function noActionFrom(blocked: BlockedAction[], index: CorpusIndex): NoAction {
+  const covered = blocked.filter((entry) => kindForCause(entry.cause) === "already_covered");
+  const evidence = [...new Set(covered.flatMap((entry) => entry.urls))].map((url) =>
+    evidenceFor(index, url),
+  );
+
+  const first = covered[0];
+  if (first && evidence.length > 0) {
+    return { kind: "already_covered", reason: coveredReason(first, evidence), evidence };
+  }
+
+  if (blocked.every((entry) => kindForCause(entry.cause) === "not_a_gap")) {
+    return { kind: "not_a_gap", reason: notAGapReason(blocked), evidence: [] };
+  }
+
+  const failed = blocked[0] as BlockedAction;
+  const gap = failed.action.gap;
+  return {
+    kind: "unverified",
+    reason: gap
+      ? `The analysis claimed "${truncate(gap, 120)}" as a gap, but ${failed.reason}, so nothing here is confirmed.`
+      : `The work recommended here did not hold up: ${failed.reason}.`,
+    evidence: failed.urls.filter((url) => index.page(url)).map((url) => evidenceFor(index, url)),
+  };
+}
+
+/**
+ * Check an `already_covered` verdict the way a gap claim is checked.
+ *
+ * "Railway already does this" is a claim about what Railway ships, so it earns
+ * nothing for being the comfortable answer: the page has to be in the corpus,
+ * it has to be documentation, and the quote has to be on it. Evidence that
+ * fails is dropped, and a verdict left with none is downgraded to unverified
+ * naming the page that could not be confirmed, because there is no honest way
+ * to keep the claim once its basis is gone.
+ */
+export function checkNoActionEvidence(
+  analysis: Analysis,
+  index: CorpusIndex,
+): { analysis: Analysis; notes: string[] } {
+  const verdict = noActionOf(analysis);
+  if (verdict.kind !== "already_covered") {
+    return { analysis: withNoAction(analysis, verdict), notes: [] };
+  }
+
+  const notes: string[] = [];
+  const kept: NoActionEvidence[] = [];
+
+  for (const entry of verdict.evidence) {
+    const page = index.page(entry.url);
+    if (!page) {
+      notes.push(`dropped ${entry.url} from the no-action verdict: it is not a page in the corpus`);
+      continue;
+    }
+    if (page.kind !== "docs") {
+      notes.push(
+        `dropped ${entry.url} from the no-action verdict: it is ${page.kind} rather than product documentation`,
+      );
+      continue;
+    }
+    if (entry.quote && !quoteAppearsOn(entry.quote, page.text)) {
+      notes.push(
+        `dropped ${entry.url} from the no-action verdict: the quote it gives is not on the stored page`,
+      );
+      continue;
+    }
+    kept.push({ ...entry, title: entry.title ?? page.title });
+  }
+
+  if (kept.length > 0) {
+    return { analysis: withNoAction(analysis, { ...verdict, evidence: kept }), notes };
+  }
+
+  const failed = verdict.evidence[0]?.url;
+  return {
+    analysis: withNoAction(analysis, {
+      kind: "unverified",
+      reason: failed
+        ? `The analysis says Railway already covers this and reads it off ${failed}, which could not be confirmed against the stored corpus, so what Railway ships here is unchecked.`
+        : "The analysis says Railway already covers this and names no page it read that on, so what Railway ships here is unchecked.",
+      evidence: [],
+    }),
+    notes,
+  };
 }

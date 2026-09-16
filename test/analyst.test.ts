@@ -232,8 +232,10 @@ describe("one reply, end to end", () => {
     );
 
     expect(analysis.actions).toEqual([]);
-    expect(analysis.noActionReason).toBeDefined();
-    expect(analysis.openQuestions.join(" ")).toContain(
+    // The verdict is the answer a reader wants off a gap the docs already
+    // cover: Railway does this, and here is the page nobody opened.
+    expect(analysis.noAction?.kind).toBe("already_covered");
+    expect(analysis.noAction?.evidence.map((page) => page.url)).toContain(
       "https://docs.railway.com/enterprise/privacy",
     );
     expect(notes.some((note) => note.includes("blocked a consider_building"))).toBe(true);

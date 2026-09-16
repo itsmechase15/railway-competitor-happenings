@@ -4,13 +4,16 @@ import {
   EDIT_KINDS,
   IMAGE_ORIGINS,
   IMPACTS,
+  NO_ACTION_KINDS,
   REVIEW_VERDICTS,
   type ActionIssue,
   type Analysis,
   type FeatureImage,
+  type NoAction,
   type RecommendedAction,
 } from "../types.js";
 import { parseDate, sanitizeCopy } from "../util/text.js";
+import { UNSTATED_NO_ACTION_REASON } from "./noAction.js";
 
 /**
  * A field the model means to leave out but sends as "" instead. Read as
@@ -109,12 +112,47 @@ const actionSchema = z.object({
   evidenceQuote: quote,
 });
 
+/**
+ * The verdict when there are no actions. The kind is read loosely: a model that
+ * invents one loses the title it would have picked, not the sentence it wrote.
+ */
+const noActionSchema = z
+  .object({
+    kind: optionalText(60),
+    reason: optionalText(600),
+    no_action_reason: optionalText(600),
+    evidence: z
+      .preprocess(
+        (value) =>
+          Array.isArray(value)
+            ? value.filter(
+                (entry) =>
+                  typeof entry === "object" &&
+                  entry !== null &&
+                  typeof (entry as { url?: unknown }).url === "string" &&
+                  (entry as { url: string }).url.trim() !== "",
+              )
+            : value,
+        z.array(
+          z.object({
+            url: z.string().min(1),
+            title: optionalText(300),
+            quote: optionalText(600),
+          }),
+        ),
+      )
+      .optional(),
+  })
+  .optional();
+
 export const analysisSchema = z.object({
   impact: impactToken.optional(),
   summary: z.string().min(1).max(600),
   key_points: lines.optional(),
   keyPoints: lines.optional(),
   actions: z.array(actionSchema).max(4).optional(),
+  no_action: noActionSchema,
+  noAction: noActionSchema,
   no_action_reason: optionalText(600),
   noActionReason: optionalText(600),
   railway_refs: refs.optional(),
@@ -130,14 +168,6 @@ export const analysisSchema = z.object({
  * an alert asking for four things is an alert nobody starts.
  */
 export const MAX_ACTIONS = 3;
-
-/**
- * Said when an analyst recommends nothing and does not say why. Zero actions
- * is a normal answer, so this is not a failure – but it is not an answer
- * either, and the alert says so rather than going out blank.
- */
-export const UNSTATED_NO_ACTION_REASON =
-  "The analysis recommended nothing and did not say why, so nothing here has been ruled out.";
 
 /** Every string a model wrote is punctuated our way before anything renders it. */
 function clean(value: string): string {
@@ -178,8 +208,38 @@ function readActions(parsed: z.infer<typeof analysisSchema>): RecommendedAction[
   // Nothing at all under `actions` is a reply that did not answer the field,
   // and only the reason it gives makes the difference readable.
   if (Array.isArray(parsed.actions)) return [];
-  if (parsed.no_action_reason ?? parsed.noActionReason) return [];
+  if (parsed.no_action ?? parsed.noAction ?? parsed.no_action_reason ?? parsed.noActionReason) {
+    return [];
+  }
   throw new Error("analysis is missing its actions list");
+}
+
+/**
+ * The verdict an empty reply came with.
+ *
+ * A structured one is read as written, with a kind we recognize or `unverified`
+ * when the model invented one. A bare sentence – which is every row stored
+ * before the verdict had a shape, and every model that reached for the old
+ * field – is unverified too: it may well be right that Railway ships this, and
+ * nothing in it names the page that would show so.
+ */
+function readNoAction(parsed: z.infer<typeof analysisSchema>): NoAction {
+  const structured = parsed.no_action ?? parsed.noAction;
+  const stated = parsed.no_action_reason ?? parsed.noActionReason;
+  const reason = structured?.reason ?? structured?.no_action_reason ?? stated;
+  const kind = NO_ACTION_KINDS.find((known) => known === structured?.kind?.trim());
+
+  return {
+    kind: kind ?? "unverified",
+    reason: clean(reason ?? UNSTATED_NO_ACTION_REASON),
+    evidence: (structured?.evidence ?? []).map((entry) => ({
+      url: entry.url.trim(),
+      ...(entry.title ? { title: clean(entry.title) } : {}),
+      // A quote is matched character by character against the stored page, so
+      // it is the one string here that is not repunctuated.
+      ...(entry.quote ? { quote: entry.quote.trim() } : {}),
+    })),
+  };
 }
 
 /** Models drift between snake_case and camelCase; accept both and normalize. */
@@ -192,16 +252,14 @@ export function normalizeAnalysis(parsed: z.infer<typeof analysisSchema>): Analy
   const keyPoints = parsed.key_points ?? parsed.keyPoints ?? [];
   const openQuestions = parsed.open_questions ?? parsed.openQuestions ?? [];
   const pagesRead = parsed.pages_read ?? parsed.pagesRead ?? [];
-  const stated = parsed.no_action_reason ?? parsed.noActionReason;
-  const noActionReason =
-    actions.length > 0 ? undefined : clean(stated ?? UNSTATED_NO_ACTION_REASON);
+  const noAction = actions.length > 0 ? undefined : readNoAction(parsed);
 
   return {
     impact: parsed.impact,
     summary: clean(parsed.summary),
     keyPoints: keyPoints.map(clean).filter(Boolean),
     actions,
-    ...(noActionReason ? { noActionReason } : {}),
+    ...(noAction ? { noAction, noActionReason: noAction.reason } : {}),
     railwayRefs: cited.map((ref) => {
       const suggestedEdit = ref.suggested_edit ?? ref.suggestedEdit;
       const proposedText =

@@ -10,8 +10,8 @@ import {
   enforceEmbedLimits,
   IMPACT_HEADING,
   KNOW_HEADING,
-  NO_ACTION_TITLE,
 } from "../src/discord/embed.js";
+import { noActionTitle } from "../src/analysis/noAction.js";
 import { IMPACT_COLOR } from "../src/labels.js";
 import { alert, analysis, issuesFor, storedItem } from "./helpers.js";
 
@@ -195,7 +195,32 @@ describe("the Discord embed", () => {
    * launch that asks nothing of Railway is worth knowing about, and a blank
    * space where the actions go reads as an alert that broke halfway through.
    */
-  it("says None, with the reason, when there is nothing to do", () => {
+  it("says which kind of nothing this is, with the docs pages under it", () => {
+    const verdict = analysis({
+      actions: [],
+      noAction: {
+        kind: "already_covered",
+        reason: "Railway already offers memory-heavy plan shapes on every tier.",
+        evidence: [{ url: "https://docs.railway.com/deployments/scaling", title: "Scaling" }],
+      },
+    });
+    const embed = buildDiscordEmbed(alert({ analysis: verdict, issues: [] }));
+    const action = embed.fields.find((field) => field.name === ACTION_HEADING);
+
+    expect(action?.value).toBe(
+      [
+        `**${noActionTitle("already_covered")}**`,
+        "Railway already offers memory-heavy plan shapes on every tier.",
+        "See: [Scaling](https://docs.railway.com/deployments/scaling)",
+      ].join("\n"),
+    );
+  });
+
+  /**
+   * A row written before the verdict had a shape carries the sentence alone,
+   * which is an unverified verdict with no pages under it.
+   */
+  it("reads a stored sentence as a verdict nobody confirmed", () => {
     const verdict = analysis({
       actions: [],
       noActionReason: "Railway already scales memory on every plan, so there is nothing to do.",
@@ -204,7 +229,7 @@ describe("the Discord embed", () => {
     const action = embed.fields.find((field) => field.name === ACTION_HEADING);
 
     expect(action?.value).toBe(
-      `**${NO_ACTION_TITLE}**\nRailway already scales memory on every plan, so there is nothing to do.`,
+      `**${noActionTitle("unverified")}**\nRailway already scales memory on every plan, so there is nothing to do.`,
     );
   });
 
@@ -213,7 +238,7 @@ describe("the Discord embed", () => {
       alert({ analysis: analysis({ actions: [] }), issues: [] }),
     );
     const action = embed.fields.find((field) => field.name === ACTION_HEADING);
-    expect(action?.value.startsWith(`**${NO_ACTION_TITLE}**`)).toBe(true);
+    expect(action?.value.startsWith("**None")).toBe(true);
   });
 
   /**
