@@ -440,7 +440,15 @@ describe("the picture on the issue", () => {
   it("puts it above the copy somebody came to paste", () => {
     const text = body([visual]);
     expect(text.indexOf(visual.imageUrl)).toBeLessThan(text.indexOf("```text"));
-    expect(text.indexOf(`### ${COMPARE_URL}`)).toBeLessThan(text.indexOf(visual.imageUrl));
+    expect(text.indexOf(`### [`)).toBeLessThan(text.indexOf(visual.imageUrl));
+  });
+
+  it("heads the page with a link somebody can click, not a bare url", () => {
+    const text = body([visual]);
+    expect(text).toContain(`### [Compare to render](${COMPARE_URL})`);
+    expect(text).not.toContain(`### ${COMPARE_URL}`);
+    // The URL is still there to read and to copy, under the link.
+    expect(text).toContain(`](${COMPARE_URL})\n${COMPARE_URL}`);
   });
 
   it("reads exactly as it did before when there is no picture", () => {

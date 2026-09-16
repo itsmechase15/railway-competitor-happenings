@@ -18,7 +18,7 @@ import {
   type RailwayRef,
   type RecommendedAction,
 } from "../types.js";
-import { SPACED_EN_DASH, truncate } from "../util/text.js";
+import { SPACED_EN_DASH, titleFromUrl, truncate } from "../util/text.js";
 
 const log = createLogger("github");
 
@@ -139,6 +139,19 @@ function supportingRefs(alert: AnalyzedItem, action: RecommendedAction): Railway
   });
 }
 
+/**
+ * A cited page as a heading: its name, linked to it, with the URL underneath.
+ *
+ * A bare URL as a heading reads as an error message and is a mouthful to scan a
+ * list of, so the name does the reading and the link does the clicking. The URL
+ * stays on its own line because somebody comparing an issue against a page
+ * wants to see which page without hovering, and because it is what gets copied
+ * into a browser that is not signed in to GitHub.
+ */
+function pageHeading(url: string): string {
+  return `### [${titleFromUrl(url)}](${url})\n${url}`;
+}
+
 /** What the proposed copy does to the line quoted above it. */
 const EDIT_KIND_LABEL: Record<EditKind, string> = {
   replace: "Replace the copy above with this, word for word:",
@@ -156,7 +169,7 @@ const EDIT_KIND_LABEL: Record<EditKind, string> = {
  * the prose back out of a sentence about it.
  */
 function pageEdit(ref: RailwayRef, visual: PageVisual | undefined): string {
-  const lines = [`### ${ref.url}`];
+  const lines = [pageHeading(ref.url)];
   // The picture goes above the words. It answers the first question anybody
   // asked to make the edit has – what does the paragraph look like with this in
   // it – and it answers it before they have read a line.
@@ -210,7 +223,9 @@ function pagesSection(
     return `${heading}\n${note}\n\n${edits}`;
   }
 
-  const pages = refs.map((ref) => `### ${ref.url}\n- **Claim today:** ${ref.claim}`).join("\n\n");
+  const pages = refs
+    .map((ref) => `${pageHeading(ref.url)}\n- **Claim today:** ${ref.claim}`)
+    .join("\n\n");
 
   return `${heading}\n${pages}`;
 }
