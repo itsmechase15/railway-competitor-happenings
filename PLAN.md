@@ -387,23 +387,35 @@ Labels: `competitor-happenings`, `render|vercel`, `source:<label>`,
 `team:<slug>` from the routing below, and one `review:<verdict>` from the pass
 after it.
 
-## Show the page edit as a picture
+## Show the page edit as two pictures of the page
 
 An `update_pages` issue carries the page, the line on it today, and the copy to
-paste. What text cannot do is show the paragraph with that copy in it, so the
-issue embeds a PNG of the paragraph twice, side by side, with removed words
-struck through and new ones highlighted.
+paste. What text cannot do is show the page with that copy on it, so the issue
+embeds two screenshots of the page, stacked: the page as it reads today, then
+the same page with the proposed copy in it.
 
-Drawn from the stored corpus copy of the page and never from the live page. The
-Before panel is the text the analyst read and the evidence gate checked the quote
-against, which is the copy somebody reviewed; the live page is neither, and
-pointing a browser at railway.com every morning to edit its DOM buys nothing.
+Taken off the live page. A headless browser opens it, shoots the window, puts
+the copy into that tab's own DOM, and shoots the window again from the same
+scroll offset. Nothing is published: the edit never leaves the tab, the tab is
+thrown away, and the After's caption in the issue says so. The line is found by
+its text, folded to letters and digits the way the evidence gate folds it, in
+the deepest block under `<main>` that holds all of it, so a redesign does not
+break it and a table of contents cannot win against the prose.
 
-A browser renders an image it can fetch, so the PNG is committed to
+This replaced a card drawn from the stored corpus text. A card of a paragraph
+is a text mock of a page, and the page is what somebody is being asked to edit.
+The corpus is still what the claim is checked against, which happens long
+before any of this; a line the live page no longer has drops the pictures and
+adds one line to the issue saying the page has moved on, because that is news
+the person opening it needs and there is nothing honest to photograph.
+
+A browser renders an image it can fetch, so both PNGs are committed to
 `artifacts/update-pages/` through the contents API before the issue is opened.
 That is the only write this app makes to the repo, and it is why the two pipeline
-workflows grant `contents: write`. The file name is a hash of the page and both
-sides of the edit: a re-run reuses it, a rewrite gets a new one.
+workflows grant `contents: write`. Each name is a hash of the page, both sides
+of the edit, and the day: a re-run the same morning reuses the pair, a run next
+week photographs the page as it is then, and a rewrite gets its own pair. If
+one of the two will not commit, both are dropped.
 
 This repo is private, and that decides the URL the issue embeds. It is
 `github.com/<repo>/blob/<commit sha>/<path>?raw=true`, an address the reader's
@@ -425,10 +437,11 @@ a human's personal access token in the secrets to post a picture.
 Page actions only. There is no before and after of a feature that does not exist,
 so `consider_enhancing` and `consider_building` never get one.
 
-Every step gives up quietly. No browser, no token, a dry run, a refused commit:
-the issue is filed in text, saying the same thing in words. A dry run still draws
-it to a temp directory and logs the path. `SKIP_PAGE_VISUALS=true` turns it off.
-A revise redraws, because the copy is what a revise changes.
+Every step gives up quietly. No browser, a page that will not load, a bot check
+served instead of it, no token, a dry run, a refused commit: the issue is filed
+in text, saying the same thing in words. A dry run still takes both shots to a
+temp directory and logs the paths. `SKIP_PAGE_VISUALS=true` turns it off. A
+revise re-photographs, because the copy is what a revise changes.
 
 ## Route it to a team, not to a department
 

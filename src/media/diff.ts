@@ -2,14 +2,13 @@
  * The word-level difference between the copy on a page and the copy proposed
  * for it.
  *
- * A page edit is a paragraph swapped for a paragraph, and shown as two blocks
- * of prose that is nearly the same prose, a reader has to read both to find out
- * what moved. Marking the words that changed is the whole value of showing the
- * two side by side, so this is what the Before/After image is drawn from.
+ * A page edit is a paragraph swapped for a paragraph, and two screenshots of
+ * nearly the same prose do not say how much of it moved. That is what this is
+ * for: the line under the pair reads "18 words added, 13 words removed", which
+ * is a size somebody can picture before they open either image.
  *
  * Compared on letters and digits only, so "billing." and "billing" are the same
- * word and a comma is not a change. The text kept in each span is the original,
- * punctuation and all, because it is what gets drawn.
+ * word and a comma is not a change.
  */
 
 /** What happened to a run of words: it stayed, it went, or it arrived. */
@@ -92,18 +91,14 @@ function commonSubsequence(before: string[], after: string[]): DiffSpan[] {
   return spans;
 }
 
-/** Consecutive words of the same kind are one span, so the drawing has one box per run. */
+/** Consecutive words of the same kind are one span, so a run is counted once. */
 function push(spans: DiffSpan[], kind: DiffKind, text: string): void {
   const last = spans[spans.length - 1];
   if (last?.kind === kind) last.text += text;
   else spans.push({ kind, text });
 }
 
-/**
- * The two texts as one list of spans, in reading order. A caller draws the
- * Before panel from everything that is not `added` and the After panel from
- * everything that is not `removed`.
- */
+/** The two texts as one list of spans, in reading order. */
 export function diffWords(before: string, after: string): DiffSpan[] {
   const from = words(before);
   const to = words(after);
@@ -122,12 +117,6 @@ export function diffWords(before: string, after: string): DiffSpan[] {
   }
 
   return commonSubsequence(from, to);
-}
-
-/** Only the spans one panel draws: the Before panel never shows an addition. */
-export function panelSpans(spans: DiffSpan[], side: "before" | "after"): DiffSpan[] {
-  const dropped: DiffKind = side === "before" ? "added" : "removed";
-  return spans.filter((span) => span.kind !== dropped);
 }
 
 /**

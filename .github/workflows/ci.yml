@@ -15,12 +15,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      # Nothing here launches a browser: the Before/After tests check the HTML
-      # and the diff, which is the part that can be wrong. Downloading Chromium
-      # for them would add a hundred megabytes to every pull request.
       - run: npm ci
-        env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      # The Before/After is two screenshots of the real page, and the code that
+      # finds the line on it and swaps the copy runs inside the browser. That is
+      # the part that can be wrong, so the browser is here rather than skipped:
+      # without it those tests skip themselves and nothing checks them until a
+      # morning run does.
+      - run: npx playwright install --with-deps chromium
       - run: npm run typecheck
       - run: npm test
       - run: npm run build

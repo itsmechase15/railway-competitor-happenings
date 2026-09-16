@@ -1,7 +1,10 @@
 {
   "compilerOptions": {
     "target": "ES2023",
-    "lib": ["ES2023"],
+    // DOM is here for one file: the locate-and-edit function in
+    // src/media/live-page.ts runs inside the headless browser, so it is written
+    // against document and window even though nothing else in the app is.
+    "lib": ["ES2023", "DOM"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "rootDir": "src",

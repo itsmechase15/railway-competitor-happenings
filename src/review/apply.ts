@@ -93,10 +93,11 @@ export interface ReviewPassInput {
   /** Null for the same reason. A revise with no writer is left as an unconfirmed review. */
   writer: ActionWriter | null;
   /**
-   * Draws the Before/After a rewritten page edit needs. A revise that changes
-   * the proposed copy makes the picture already on the issue a picture of copy
-   * nobody is proposing any more, so it is drawn again from the rewrite. Absent
-   * in a caller that never draws them, which leaves the rewritten issue in text.
+   * Takes the Before/After a rewritten page edit needs. A revise that changes
+   * the proposed copy leaves the pictures on the issue showing copy nobody is
+   * proposing any more, so the page is photographed again from the rewrite.
+   * Absent in a caller that takes none, which leaves the rewritten issue in
+   * text.
    */
   visualMaker?: PageVisualMaker;
   index: CorpusIndex;
@@ -351,8 +352,8 @@ async function revise(
     railwayRefs: merged.refs,
   };
   const revisedAlert: AnalyzedItem = { ...alert, analysis: revised };
-  // Drawn from the rewrite, never carried over. The picture on the issue is of
-  // the copy the issue asks for, and a revise usually changes exactly that.
+  // Taken from the rewrite, never carried over. The pictures on the issue are
+  // of the copy the issue asks for, and a revise usually changes exactly that.
   const visuals = (await input.visualMaker?.make(revisedAlert, checked.action)) ?? [];
 
   const landed = await input.editor.update(target.issue, {

@@ -215,6 +215,8 @@ export class GitHubArtifactWriter implements ArtifactWriter {
  */
 export class LocalArtifactWriter implements ArtifactWriter {
   readonly description: string;
+  /** One directory for the whole run, so a Before and its After land together. */
+  private directory: Promise<string> | null = null;
 
   constructor(readonly reason: string) {
     this.description = `writes to a temp directory (${reason})`;
@@ -222,7 +224,8 @@ export class LocalArtifactWriter implements ArtifactWriter {
 
   async write(path: string, png: Buffer): Promise<string | null> {
     try {
-      const directory = await mkdtemp(join(tmpdir(), "update-pages-"));
+      this.directory ??= mkdtemp(join(tmpdir(), "update-pages-"));
+      const directory = await this.directory;
       const file = join(directory, path.split("/").pop() ?? "before-after.png");
       await writeFile(file, png);
       log.info(`[${this.reason}] would commit ${path} ${"\u2013"} wrote it to ${file} instead`);

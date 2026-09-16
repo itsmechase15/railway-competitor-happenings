@@ -66,10 +66,11 @@ jobs:
       - run: npm run build
         if: steps.window.outputs.proceed == 'true'
 
-      # Draws the Before/After on an update_pages issue. A run without it still
-      # files every issue, in text, so this is not a hard requirement – it is
-      # installed explicitly rather than relying on npm's postinstall so a
-      # failure to fetch it says so here instead of at the point of drawing.
+      # Opens the page an update_pages issue is about and photographs it before
+      # and after. A run without it still files every issue, in text, so this is
+      # not a hard requirement – it is installed explicitly rather than relying
+      # on npm's postinstall so a failure to fetch it says so here instead of at
+      # the point of taking the shot.
       - name: Install Chromium for the before/after images
         if: steps.window.outputs.proceed == 'true'
         run: npx playwright install --with-deps chromium

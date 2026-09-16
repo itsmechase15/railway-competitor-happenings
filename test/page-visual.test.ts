@@ -6,15 +6,16 @@ import {
   createArtifactWriter,
   GitHubArtifactWriter,
   LocalArtifactWriter,
+  type ArtifactWriter,
 } from "../src/github/artifact.js";
 import { buildIssueBody, buildIssueDrafts } from "../src/github/issue.js";
-import { diffSummary, diffWords, panelSpans, words } from "../src/media/diff.js";
+import { diffSummary, diffWords, words } from "../src/media/diff.js";
+import type { CaptureResult } from "../src/media/live-page.js";
 import {
   looseSpan,
   paragraphWith,
   planPageEdit,
-  visualHtml,
-  visualPath,
+  visualPaths,
   VISUAL_DIR,
   type PageVisual,
 } from "../src/media/page-edit.js";
@@ -23,6 +24,7 @@ import {
   createPageVisualMaker,
   DisabledPageVisualMaker,
   plansFor,
+  publishCapture,
 } from "../src/media/visual.js";
 import type { AnalyzedItem, RailwayRef, RecommendedAction } from "../src/types.js";
 import { alert, analysis, corpusIndex, featureImage, storedItem } from "./helpers.js";
@@ -34,13 +36,15 @@ const PAGE_TEXT = [
   "Both platforms give you a managed Postgres with daily backups.",
 ].join("\n\n");
 
-const CLAIM =
-  "Render keeps a web service running until you scale it down yourself.";
+const CLAIM = "Render keeps a web service running until you scale it down yourself.";
 
 const PROPOSED =
   "Render now bills a web service per request once it goes idle, so a quiet service costs close to nothing between requests.";
 
 const COMPARE_URL = "https://docs.railway.com/platform/compare-to-render";
+
+/** The day a capture is stamped with, fixed so a test is not a clock. */
+const TODAY = "2026-09-16";
 
 const ref = (overrides: Partial<RailwayRef> = {}): RailwayRef => ({
   url: COMPARE_URL,
@@ -56,7 +60,9 @@ const pageAction = (overrides: Partial<RecommendedAction> = {}): RecommendedActi
   ...overrides,
 });
 
-describe("the word diff a before/after is drawn from", () => {
+const plan = (overrides: Partial<RailwayRef> = {}) => planPageEdit(ref(overrides), PAGE_TEXT, TODAY)!;
+
+describe("the word diff a before/after is measured with", () => {
   it("splits text into words that join back into the original", () => {
     const text = "Railway stops an idle container.";
     expect(words(text).join("")).toBe(text);
@@ -72,11 +78,6 @@ describe("the word diff a before/after is drawn from", () => {
     const spans = diffWords("Railway bills by the minute", "railway bills, by the minute.");
     expect(spans.every((span) => span.kind === "same")).toBe(true);
     expect(diffSummary(spans)).toBe("no words changed, only punctuation or casing");
-  });
-
-  it("draws the page's own spelling of a word that only changed punctuation", () => {
-    const spans = diffWords("bills by the minute", "bills by the minute.");
-    expect(spans.map((span) => span.text).join("")).toBe("bills by the minute");
   });
 
   it("counts what changed in words, so the line reads as a size", () => {
@@ -97,18 +98,14 @@ describe("the word diff a before/after is drawn from", () => {
     const spans = diffWords(long, "something much shorter");
     expect(spans.map((span) => span.kind)).toEqual(["removed", "added"]);
   });
-
-  it("gives each panel only the spans it can show", () => {
-    const spans = diffWords("keeps it running", "bills it per request");
-    expect(panelSpans(spans, "before").every((span) => span.kind !== "added")).toBe(true);
-    expect(panelSpans(spans, "after").every((span) => span.kind !== "removed")).toBe(true);
-  });
 });
 
-describe("finding the line on the page", () => {
+describe("finding the line on the stored page", () => {
   it("finds a quote that differs from the page by punctuation or spacing", () => {
     const paragraph = "Railway  stops an idle container, and bills it by the minute.";
-    expect(looseSpan(paragraph, "Railway stops an idle container and bills it by the minute")).not.toBeNull();
+    expect(
+      looseSpan(paragraph, "Railway stops an idle container and bills it by the minute"),
+    ).not.toBeNull();
     expect(looseSpan(paragraph, "Railway runs it forever")).toBeNull();
   });
 
@@ -126,121 +123,80 @@ describe("finding the line on the page", () => {
 });
 
 describe("planning one page edit", () => {
-  it("shows the paragraph around the edit, with the changed line marked", () => {
-    const plan = planPageEdit(ref(), PAGE_TEXT)!;
-    expect(plan.fromCorpus).toBe(true);
-    expect(plan.before.lead).toContain("Railway stops an idle container");
-    expect(plan.before.spans.some((span) => span.kind === "removed")).toBe(true);
-    expect(plan.after.spans.some((span) => span.kind === "added")).toBe(true);
-    // The paragraph before and after this one are not the edit's business.
-    expect(plan.before.lead).not.toContain("managed Postgres");
+  it("carries the line to look for and the copy to stage in its place", () => {
+    expect(plan().claim).toBe(CLAIM);
+    expect(plan().proposedText).toBe(PROPOSED);
+    expect(plan().editKind).toBe("replace");
   });
 
-  it("keeps the line and adds the copy next to it for an insert", () => {
-    const plan = planPageEdit(ref({ editKind: "insert" }), PAGE_TEXT)!;
-    expect(plan.editKind).toBe("insert");
-    expect(plan.before.spans.every((span) => span.kind === "same")).toBe(true);
-    expect(plan.summary).not.toContain("removed");
+  it("measures the edit against the line it replaces", () => {
+    expect(plan().summary).toMatch(/words added.*words removed/);
   });
 
-  it("falls back to the quoted line alone when the corpus has no copy of the page", () => {
-    const plan = planPageEdit(ref(), undefined)!;
-    expect(plan.fromCorpus).toBe(false);
-    expect(plan.before.lead).toBe("");
-    expect(visualHtml(plan)).toContain("The corpus held no copy of this page");
+  it("measures an insert as copy arriving, because an insert removes nothing", () => {
+    expect(plan({ editKind: "insert" }).summary).not.toContain("removed");
   });
 
-  it("draws nothing without finished copy to draw an After from", () => {
-    expect(planPageEdit(ref({ proposedText: undefined }), PAGE_TEXT)).toBeNull();
-    expect(planPageEdit(ref({ proposedText: "   " }), PAGE_TEXT)).toBeNull();
-    expect(planPageEdit(ref({ claim: "" }), PAGE_TEXT)).toBeNull();
+  it("plans nothing without finished copy, or without a line to look for", () => {
+    expect(planPageEdit(ref({ proposedText: undefined }), PAGE_TEXT, TODAY)).toBeNull();
+    expect(planPageEdit(ref({ proposedText: "   " }), PAGE_TEXT, TODAY)).toBeNull();
+    expect(planPageEdit(ref({ claim: "" }), PAGE_TEXT, TODAY)).toBeNull();
   });
 
-  it("names the page and says what the copy does to it", () => {
-    expect(planPageEdit(ref(), PAGE_TEXT)!.pageName).toBe("Compare to render");
-    expect(visualHtml(planPageEdit(ref(), PAGE_TEXT)!)).toContain(
-      "the proposed copy replaces the highlighted line",
-    );
-    expect(visualHtml(planPageEdit(ref({ editKind: "insert" }), PAGE_TEXT)!)).toContain(
-      "the proposed copy goes in next to the highlighted line",
-    );
+  it("records whether the stored page still has the line, so a live miss means something", () => {
+    expect(plan().quotedOnStoredPage).toBe(true);
+    expect(planPageEdit(ref(), undefined, TODAY)!.quotedOnStoredPage).toBe(false);
+    expect(plan({ claim: "A line no stored page has on it." }).quotedOnStoredPage).toBe(false);
   });
 
-  it("says in the alt text which page it is of and how much moved", () => {
-    const plan = planPageEdit(ref(), PAGE_TEXT)!;
-    expect(plan.altText).toBe(`Before and after of the compare to render page: ${plan.summary}`);
+  it("names the page, and says in each alt text which shot it is", () => {
+    expect(plan().pageName).toBe("Compare to render");
+    expect(plan().beforeAlt).toContain("as it reads today");
+    expect(plan().afterAlt).toContain("with the proposed copy in it");
+    expect(plan().afterAlt).toContain(plan().summary);
   });
 });
 
-describe("where a picture is filed", () => {
-  it("names the file for the page, under one folder", () => {
-    expect(visualPath(ref())).toMatch(
-      new RegExp(`^${VISUAL_DIR}/platform-compare-to-render-[0-9a-f]{10}\\.png$`),
+describe("where the pair is filed", () => {
+  it("names two files for the page, under one folder", () => {
+    const paths = visualPaths(ref(), TODAY);
+    const stem = `${VISUAL_DIR}/platform-compare-to-render-[0-9a-f]{10}`;
+    expect(paths.before).toMatch(new RegExp(`^${stem}-before\\.png$`));
+    expect(paths.after).toMatch(new RegExp(`^${stem}-after\\.png$`));
+  });
+
+  it("lands on the same files when the same edit is photographed again that day", () => {
+    expect(visualPaths(ref(), TODAY)).toEqual(visualPaths(ref(), TODAY));
+  });
+
+  it("photographs the page afresh on another day, rather than reusing yesterday's before", () => {
+    expect(visualPaths(ref(), "2026-09-17").before).not.toBe(visualPaths(ref(), TODAY).before);
+  });
+
+  it("takes new files when the copy changes, so an open issue keeps its pictures", () => {
+    expect(visualPaths(ref({ proposedText: "Different copy entirely, at length." }), TODAY)).not.toEqual(
+      visualPaths(ref(), TODAY),
     );
-  });
-
-  it("lands on the same path when the same edit is drawn again", () => {
-    expect(visualPath(ref())).toBe(visualPath(ref()));
-  });
-
-  it("takes a new path when the copy changes, so an open issue keeps its picture", () => {
-    expect(visualPath(ref({ proposedText: "Different copy entirely, at length." }))).not.toBe(
-      visualPath(ref()),
-    );
-  });
-});
-
-describe("the drawn page as HTML", () => {
-  const html = (): string => visualHtml(planPageEdit(ref(), PAGE_TEXT)!);
-
-  it("shows both panels, labelled", () => {
-    expect(html()).toContain("the page today");
-    expect(html()).toContain("with this edit");
-  });
-
-  it("says the picture came off the stored copy rather than the live page", () => {
-    expect(html()).toContain("Rendered from the stored corpus copy of this page");
-  });
-
-  it("asks for nothing over the network, so a screenshot cannot wait on a font", () => {
-    // No stylesheet, no webfont, no image. A shot that waits on a resource
-    // renders in a fallback face some mornings and times out on others.
-    expect(html()).not.toMatch(/(?:src|href)=/);
-    expect(html()).not.toMatch(/@import|url\(/);
-  });
-
-  it("escapes copy that would otherwise be markup", () => {
-    const nasty = planPageEdit(
-      ref({
-        claim: CLAIM,
-        proposedText: 'Railway bills <script>alert("x")</script> by the minute, and it always has.',
-      }),
-      PAGE_TEXT,
-    )!;
-    expect(visualHtml(nasty)).toContain("&lt;script&gt;");
-    expect(visualHtml(nasty)).not.toContain("<script>");
-  });
-
-  it("leaves whitespace outside a highlight, so no box hangs off the last word", () => {
-    // A marked run ending in a space draws a coloured box past the word.
-    expect(html()).not.toMatch(/<mark class="(added|removed)">\s/);
-    expect(html()).not.toMatch(/\s<\/mark>/);
   });
 });
 
 describe("which actions get a picture", () => {
-  const index = () => corpusIndex([{ url: COMPARE_URL, title: "Compare to Render", text: PAGE_TEXT, kind: "marketing" }]);
+  const index = () =>
+    corpusIndex([
+      { url: COMPARE_URL, title: "Compare to Render", text: PAGE_TEXT, kind: "marketing" },
+    ]);
 
   const alertFor = (action: RecommendedAction, refs: RailwayRef[] = [ref()]): AnalyzedItem =>
     alert({ analysis: analysis({ actions: [action], railwayRefs: refs }) });
 
-  it("draws one for a page edit", () => {
+  it("photographs a page edit", () => {
     const plans = plansFor(alertFor(pageAction()), pageAction(), index());
     expect(plans).toHaveLength(1);
     expect(plans[0]?.pageUrl).toBe(COMPARE_URL);
+    expect(plans[0]?.quotedOnStoredPage).toBe(true);
   });
 
-  it("never draws one for a feature action, because there is no before of a feature", () => {
+  it("never photographs a feature action, because there is no before of a feature", () => {
     for (const type of ["consider_enhancing", "consider_building"] as const) {
       const action: RecommendedAction = { type, feature: "CDN", detail: "Add it." };
       expect(plansFor(alertFor(action), action, index())).toEqual([]);
@@ -257,7 +213,7 @@ describe("which actions get a picture", () => {
     expect(plansFor(alertFor(pageAction(), [bare]), pageAction(), index())).toEqual([]);
   });
 
-  it("draws at most two, so the copy is not under a screenful of images", () => {
+  it("photographs at most two pages, so the copy is not under four screenshots", () => {
     const refs = [
       ref(),
       ref({ url: "https://docs.railway.com/platform/migrate-from-render" }),
@@ -266,22 +222,77 @@ describe("which actions get a picture", () => {
     expect(plansFor(alertFor(pageAction(), refs), pageAction(), index())).toHaveLength(2);
   });
 
-  it("says what the commit is for, and keeps CI out of it", () => {
-    const plan = planPageEdit(ref(), PAGE_TEXT)!;
-    const message = commitMessage(alertFor(pageAction()), plan);
-    expect(message).toContain("[skip ci]");
-    expect(message).toContain(COMPARE_URL);
-    expect(message).toContain("render");
+  it("says which shot the commit is, what it is of, and keeps CI out of it", () => {
+    const before = commitMessage(alertFor(pageAction()), plan(), "before");
+    const after = commitMessage(alertFor(pageAction()), plan(), "after");
+    expect(before).toContain("[skip ci]");
+    expect(before).toContain(`as it read on ${TODAY}`);
+    expect(after).toContain("published nowhere");
+    expect(after).toContain(COMPARE_URL);
   });
 
-  it("draws nothing at all when the switch is off", async () => {
-    const off = createPageVisualMaker(
-      { skipPageVisuals: true } as Config,
-      index(),
-    );
+  it("photographs nothing at all when the switch is off", async () => {
+    const off = createPageVisualMaker({ skipPageVisuals: true } as Config, index());
     expect(off).toBeInstanceOf(DisabledPageVisualMaker);
     expect(off.description).toContain("SKIP_PAGE_VISUALS");
     expect(await off.make(alertFor(pageAction()), pageAction())).toEqual([]);
+  });
+});
+
+describe("publishing what the capture came back with", () => {
+  const captured: CaptureResult = {
+    status: "captured",
+    before: Buffer.from("before png"),
+    after: Buffer.from("after png"),
+  };
+
+  const writer = (urls: Array<string | null>): ArtifactWriter => {
+    const queue = [...urls];
+    return {
+      description: "a fake",
+      write: vi.fn(async () => queue.shift() ?? null),
+    };
+  };
+
+  const publish = (capture: CaptureResult, artifacts: ArtifactWriter, quoted = true) =>
+    publishCapture(
+      artifacts,
+      alert(),
+      { ...plan(), quotedOnStoredPage: quoted },
+      capture,
+    );
+
+  it("hands back both urls once both pngs are committed", async () => {
+    const visual = await publish(captured, writer(["https://github.com/o/r/blob/a/b-before.png?raw=true", "https://github.com/o/r/blob/a/b-after.png?raw=true"]));
+    expect(visual?.shots?.beforeUrl).toContain("before");
+    expect(visual?.shots?.afterUrl).toContain("after");
+    expect(visual?.capturedOn).toBe(TODAY);
+  });
+
+  it("drops both when only one of them landed, rather than showing half a comparison", async () => {
+    const visual = await publish(captured, writer(["https://github.com/o/r/blob/a/b-before.png?raw=true", null]));
+    expect(visual).toBeNull();
+  });
+
+  it("drops both when a url would expire out from under the issue", async () => {
+    const signed = "https://raw.githubusercontent.com/o/r/main/x.png?token=AJ7VCK";
+    const visual = await publish(captured, writer(["https://github.com/o/r/blob/a/b-before.png?raw=true", signed]));
+    expect(visual).toBeNull();
+  });
+
+  it("says nothing at all when the page could not be loaded", async () => {
+    const skipped: CaptureResult = { status: "skipped", reason: "the page answered 503" };
+    expect(await publish(skipped, writer([]))).toBeNull();
+  });
+
+  it("notes a line the stored page has and the live page does not", async () => {
+    const visual = await publish({ status: "missing" }, writer([]));
+    expect(visual?.shots).toBeNull();
+    expect(visual?.copyMissingLive).toBe(true);
+  });
+
+  it("says nothing when the line is on neither, which is not news about the live page", async () => {
+    expect(await publish({ status: "missing" }, writer([]), false)).toBeNull();
   });
 });
 
@@ -294,9 +305,9 @@ const config = (overrides: Partial<Config>): Config =>
     ...overrides,
   }) as Config;
 
-describe("committing the picture so an issue can render it", () => {
+describe("committing the pictures so an issue can render them", () => {
   const png = Buffer.from("not really a png");
-  const path = `${VISUAL_DIR}/platform-compare-to-render-abc1234567.png`;
+  const path = `${VISUAL_DIR}/platform-compare-to-render-abc1234567-before.png`;
   const sha = "9f4c1b2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b";
   const blob = `https://github.com/o/r/blob/${sha}/${path}?raw=true`;
 
@@ -314,19 +325,17 @@ describe("committing the picture so an issue can render it", () => {
   it("puts the file and hands back a url pinned to the commit it made", async () => {
     const spy = vi
       .fn()
-      .mockResolvedValue(
-        json({ content: { download_url: signedRawUrl }, commit: { sha } }, 201),
-      );
+      .mockResolvedValue(json({ content: { download_url: signedRawUrl }, commit: { sha } }, 201));
     vi.stubGlobal("fetch", spy);
 
-    expect(await writer().write(path, png, "Add a before/after")).toBe(blob);
+    expect(await writer().write(path, png, "Add the before")).toBe(blob);
 
     const [url, init] = spy.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(`https://api.github.com/repos/o/r/contents/${path}`);
     expect(init.method).toBe("PUT");
     const sent = JSON.parse(init.body as string) as { content: string; message: string };
     expect(Buffer.from(sent.content, "base64").toString()).toBe("not really a png");
-    expect(sent.message).toBe("Add a before/after");
+    expect(sent.message).toBe("Add the before");
   });
 
   it("never hands back the signed raw url, however the file got there", async () => {
@@ -334,14 +343,14 @@ describe("committing the picture so an issue can render it", () => {
       .fn()
       .mockResolvedValue(json({ content: { download_url: signedRawUrl }, commit: { sha } }, 201));
     vi.stubGlobal("fetch", created);
-    const fresh = await writer().write(path, png, "Add a before/after");
+    const fresh = await writer().write(path, png, "Add the before");
 
     const reused = vi
       .fn()
       .mockResolvedValueOnce(json({ message: "sha wasn't supplied" }, 422))
       .mockResolvedValueOnce(json([{ sha }]));
     vi.stubGlobal("fetch", reused);
-    const existing = await writer().write(path, png, "Add a before/after");
+    const existing = await writer().write(path, png, "Add the before");
 
     for (const url of [fresh, existing]) {
       expect(url).not.toContain("raw.githubusercontent.com");
@@ -358,7 +367,7 @@ describe("committing the picture so an issue can render it", () => {
       .mockResolvedValueOnce(json([{ sha }]));
     vi.stubGlobal("fetch", spy);
 
-    expect(await writer().write(path, png, "Add a before/after")).toBe(blob);
+    expect(await writer().write(path, png, "Add the before")).toBe(blob);
     expect(spy).toHaveBeenCalledTimes(2);
 
     const [url, init] = spy.mock.calls[1] as [string, RequestInit];
@@ -377,19 +386,19 @@ describe("committing the picture so an issue can render it", () => {
       .mockResolvedValueOnce(json({ html_url: htmlUrl, download_url: signedRawUrl }));
     vi.stubGlobal("fetch", spy);
 
-    expect(await writer().write(path, png, "Add a before/after")).toBe(`${htmlUrl}?raw=true`);
+    expect(await writer().write(path, png, "Add the before")).toBe(`${htmlUrl}?raw=true`);
   });
 
   it("gives back nothing, rather than throwing, when the commit is refused", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ message: "Bad credentials" }, 401)));
-    expect(await writer().write(path, png, "Add a before/after")).toBeNull();
+    expect(await writer().write(path, png, "Add the before")).toBeNull();
   });
 
   it("knows which urls carry something that expires", () => {
     expect(carriesCredential(signedRawUrl)).toBe(true);
-    expect(carriesCredential("https://private-user-images.githubusercontent.com/1/x.png?jwt=ey")).toBe(
-      true,
-    );
+    expect(
+      carriesCredential("https://private-user-images.githubusercontent.com/1/x.png?jwt=ey"),
+    ).toBe(true);
     expect(carriesCredential(blob)).toBe(false);
     expect(carriesCredential(blobUrl("o/r", sha, path))).toBe(false);
     expect(carriesCredential("not a url at all")).toBe(false);
@@ -405,7 +414,7 @@ describe("committing the picture so an issue can render it", () => {
     );
   });
 
-  it("still draws the picture in a dry run, to a temp file, and publishes nothing", async () => {
+  it("still writes the picture in a dry run, to a temp file, and publishes nothing", async () => {
     const spy = vi.fn();
     vi.stubGlobal("fetch", spy);
     expect(await new LocalArtifactWriter("dry run").write(path, png)).toBeNull();
@@ -413,12 +422,18 @@ describe("committing the picture so an issue can render it", () => {
   });
 });
 
-describe("the picture on the issue", () => {
+describe("the pictures on the issue", () => {
   const visual: PageVisual = {
     pageUrl: COMPARE_URL,
-    imageUrl: `https://github.com/o/r/blob/9f4c1b2d3e/${VISUAL_DIR}/x.png?raw=true`,
-    altText: "Before and after of the compare to render page: 16 words added",
+    shots: {
+      beforeUrl: `https://github.com/o/r/blob/9f4c1b2d3e/${VISUAL_DIR}/x-before.png?raw=true`,
+      afterUrl: `https://github.com/o/r/blob/9f4c1b2d3e/${VISUAL_DIR}/x-after.png?raw=true`,
+      beforeAlt: "The compare to render page as it reads today, the quoted line in place",
+      afterAlt: "The compare to render page with the proposed copy in it: 16 words added",
+    },
     summary: "16 words added, 13 words removed",
+    capturedOn: TODAY,
+    copyMissingLive: false,
   };
 
   const body = (visuals: PageVisual[]): string => {
@@ -431,16 +446,28 @@ describe("the picture on the issue", () => {
     );
   };
 
-  it("embeds the image so GitHub renders it, rather than linking it", () => {
+  it("embeds both shots so GitHub renders them, rather than linking them", () => {
     const text = body([visual]);
-    expect(text).toContain(`![${visual.altText}](${visual.imageUrl})`);
+    expect(text).toContain(`![${visual.shots!.beforeAlt}](${visual.shots!.beforeUrl})`);
+    expect(text).toContain(`![${visual.shots!.afterAlt}](${visual.shots!.afterUrl})`);
     expect(text).toContain(visual.summary);
   });
 
-  it("puts it above the copy somebody came to paste", () => {
+  it("puts the before first, stacked above the after", () => {
     const text = body([visual]);
-    expect(text.indexOf(visual.imageUrl)).toBeLessThan(text.indexOf("```text"));
-    expect(text.indexOf(`### [`)).toBeLessThan(text.indexOf(visual.imageUrl));
+    expect(text.indexOf("**Before**")).toBeLessThan(text.indexOf("**After**"));
+    expect(text.indexOf(visual.shots!.beforeUrl)).toBeLessThan(text.indexOf(visual.shots!.afterUrl));
+  });
+
+  it("says the after was staged in a browser and published nowhere", () => {
+    expect(body([visual])).toContain("staged in a browser only. Nothing was published.");
+    expect(body([visual])).toContain(`the live page on ${TODAY}`);
+  });
+
+  it("puts them above the copy somebody came to paste", () => {
+    const text = body([visual]);
+    expect(text.indexOf(visual.shots!.afterUrl)).toBeLessThan(text.indexOf("```text"));
+    expect(text.indexOf("### [")).toBeLessThan(text.indexOf(visual.shots!.beforeUrl));
   });
 
   it("heads the page with a link somebody can click, not a bare url", () => {
@@ -449,6 +476,13 @@ describe("the picture on the issue", () => {
     expect(text).not.toContain(`### ${COMPARE_URL}`);
     // The URL is still there to read and to copy, under the link.
     expect(text).toContain(`](${COMPARE_URL})\n${COMPARE_URL}`);
+  });
+
+  it("warns when the quoted line was not on the live page, and shows nothing", () => {
+    const text = body([{ ...visual, shots: null, copyMissingLive: true }]);
+    expect(text).not.toContain("![");
+    expect(text).toContain(`was not found on the live page on ${TODAY}`);
+    expect(text).toContain("```text");
   });
 
   it("reads exactly as it did before when there is no picture", () => {
@@ -460,10 +494,10 @@ describe("the picture on the issue", () => {
 
   it("leaves an unrelated page's edit without one", () => {
     const other = { ...visual, pageUrl: "https://docs.railway.com/platform/compare-to-vercel" };
-    expect(body([other])).not.toContain(other.imageUrl);
+    expect(body([other])).not.toContain(other.shots!.beforeUrl);
   });
 
-  it("carries the picture through to the draft, keyed to its own action", () => {
+  it("carries the pictures through to the draft, keyed to their own action", () => {
     const page = pageAction();
     const feature: RecommendedAction = {
       type: "consider_enhancing",
@@ -476,7 +510,7 @@ describe("the picture on the issue", () => {
       new Map([[page, [visual]]]),
     );
 
-    expect(drafts[0]?.draft.body).toContain(visual.imageUrl);
-    expect(drafts[1]?.draft.body).not.toContain(visual.imageUrl);
+    expect(drafts[0]?.draft.body).toContain(visual.shots!.beforeUrl);
+    expect(drafts[1]?.draft.body).not.toContain(visual.shots!.beforeUrl);
   });
 });

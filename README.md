@@ -54,7 +54,8 @@ quotes the line as it stands, and writes the replacement out in full, in that
 page's own voice, so the issue is a copy and a paste rather than a writing
 assignment. "Mention the new thing here" is not an edit, and an action that
 proposes one is dropped like any other unevidenced claim. The issue also shows
-the paragraph twice, side by side, with the words that changed marked. See
+the page itself twice: a screenshot of it as it reads today, and one of the
+same page with the proposed copy in it. See
 [Before and after on a page edit](#before-and-after-on-a-page-edit).
 
 Then every action that made it into an issue is reviewed once, by a second
@@ -98,23 +99,35 @@ becomes the pass [AGENTS.md](./AGENTS.md) rules out.
 ## Before and after on a page edit
 
 An `update_pages` issue carries the page, the line on it today, and the copy to
-paste. The first question the person making the edit has is what the paragraph
-looks like with that copy in it, and no amount of text answers it, so the issue
-shows a picture: the paragraph twice, side by side, with the removed words struck
-through in red and the new ones in green.
+paste. The first question the person making the edit has is what the page looks
+like with that copy on it, and no amount of text answers it. So the issue shows
+two screenshots of the page, stacked: **Before**, the page as it reads today,
+and **After**, the same page with the proposed copy in it, sidebar, heading,
+type and all.
 
-It is drawn from the **stored corpus copy of the page, never the live page**.
-That is the same text the analyst read and the same text the evidence gate
-checked the quote against, so the Before panel is the copy somebody reviewed
-rather than whatever railway.com serves this morning. Loading the real page and
-editing its DOM would produce a picture of a page nobody reviewed, and would put
-this bot's browser on Railway's own site every morning.
+They are taken off the **live page**. A headless browser opens it, photographs
+the window, puts the copy into that tab's own document, and photographs the
+window again at the same scroll offset, so flipping between the two moves only
+the words that changed. **Nothing is published by any of it.** The edit exists
+in one throwaway tab for the second between the shots, no form is submitted,
+and the After's caption says so in the issue, because somebody scrolling past a
+picture of their own docs page must not come away thinking the change is live.
 
-Only page actions get one. `consider_enhancing` and `consider_building` are
+The line is found by its text and never by a CSS selector: the sentence is the
+thing the bot quoted and the class names are not, so the deepest block under
+`<main>` whose letters and digits contain the quoted line is the one edited. A
+line that is on the stored page and not on the live one is a page that has
+moved on since the corpus read it, which drops the pictures and puts one line
+in the issue saying so. The corpus is still what the claim is checked against;
+it is no longer what the picture is of. The earlier version of this drew the
+paragraph into a card from the stored text, and a card of a page reads as a
+text mock rather than as the page.
+
+Only page actions get a pair. `consider_enhancing` and `consider_building` are
 asking for a feature, and there is no before and after of a feature that does not
 exist yet.
 
-A browser renders an image it can fetch, so the PNG is committed to
+A browser renders an image it can fetch, so both PNGs are committed to
 [`artifacts/update-pages/`](./artifacts/update-pages/) through the contents API
 before the issue is opened. This repo is private, so what the issue embeds is
 `github.com/<repo>/blob/<commit sha>/<path>?raw=true`: github.com is the host
@@ -124,18 +137,21 @@ own `download_url` is a `raw.githubusercontent.com` address signed with a
 short-lived token, which renders for minutes and 404s for everybody who opens
 the issue afterwards, so it never reaches an issue body. Committing is the only
 thing in the app that writes to the repo, and the reason `daily.yml` and
-`force-post.yml` grant `contents: write`. Each file is named for the page and a
-hash of both sides of the edit, so re-running a recommendation reuses the file
-and a rewritten edit gets a new one rather than changing the picture an open
-issue points at.
+`force-post.yml` grant `contents: write`. The files are named for the page, a
+hash of both sides of the edit, and the day they were taken: a second run the
+same morning reuses them, next week's run photographs the page as it is next
+week, and a rewritten edit gets its own pair rather than changing the pictures
+an open issue points at. One of the two failing to commit drops both, because
+half a comparison is worse than none.
 
-Everything about it fails soft. No Chromium, no token, a dry run, a refused
-commit, a page edit with no proposed copy: each costs the picture and none of them
-costs the issue, which says the same thing in words. A dry run draws it anyway,
-to a temp directory, and logs where. `SKIP_PAGE_VISUALS=true` turns it off.
+Everything about it fails soft. No Chromium, a page that will not load, a bot
+check, no token, a dry run, a refused commit, a page edit with no proposed copy:
+each costs the pictures and none of them costs the issue, which says the same
+thing in words. A dry run takes them anyway, to a temp directory, and logs
+where. `SKIP_PAGE_VISUALS=true` turns it off.
 
-A revise redraws. Changing the copy is the reviewer's whole job, and a picture of
-copy nobody is proposing any more is worse than no picture.
+A revise re-photographs. Changing the copy is the reviewer's whole job, and a
+picture of copy nobody is proposing any more is worse than no picture.
 
 ## Who each issue is for
 
@@ -369,10 +385,11 @@ off when you are iterating on something else.
 | `src/railway/pages.ts` | What a page action may target |
 | `src/railway/teams.ts` | Railway's teams, read off the titles on the about page, and what each one builds |
 | `src/teams.ts` | Which of them an action is for: the model's answer, then who owns the surface, then a default |
-| `src/media/diff.ts` | The word-level diff a Before/After is drawn from |
-| `src/media/page-edit.ts` | Finds the paragraph, plans the two panels, renders the HTML. No browser, no network |
-| `src/media/visual.ts` | The headless-browser screenshot, and every path that gives up on it quietly |
-| `src/github/artifact.ts` | Commits the PNG so an issue can render it inline |
+| `src/media/diff.ts` | The word-level diff the line under the pair is counted from |
+| `src/media/page-edit.ts` | What the edit is and where the two PNGs go. No browser, no network |
+| `src/media/live-page.ts` | Opens the page, finds the line on it, stages the copy in the browser, takes both shots |
+| `src/media/visual.ts` | Which edits get photographed, and every path that gives up on it quietly |
+| `src/github/artifact.ts` | Commits the PNGs so an issue can render them inline |
 | `src/analysis/analyst.ts` | One analyst run, read-only, with the files it opened recorded |
 | `src/analysis/evidence.ts` | The gate: citations, quotes, the coverage check, page edits |
 | `src/analysis/` | The prompt, the reply schema, the docs-grounding guards, and the no-key fallback |
