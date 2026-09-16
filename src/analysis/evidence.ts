@@ -58,6 +58,68 @@ const PACKAGING_PHRASES = [
 const DOCUMENTATION_LEAD =
   /^(document|documenting|write (up )?(the )?docs|add (a |the )?(docs?|documentation|doc page)|publish (a |the )?docs?|update the docs|create (a |the )?docs?)\b/i;
 
+/**
+ * Copy short enough to be a heading fragment rather than an edit. Two clauses
+ * of a sentence: below this there is nothing a person could paste.
+ */
+const MIN_PROPOSED_CHARS = 40;
+
+/**
+ * How a page edit reads when it tells somebody to write the copy instead of
+ * writing it. Every one of these opens a note about the page rather than a
+ * line that belongs on it.
+ *
+ * The verbs are all qualified, because a migrate page is a how-to and its own
+ * copy is full of imperatives. "Add your environment variables to the service"
+ * is a line on the page; "Add a line about per-request billing" is a note
+ * about it, and only the second one starts on an object of ours.
+ */
+const INSTRUCTION_LEAD =
+  /^(say|says|mention|mentions|note that|state that|clarify|call out|point out|reword|rewrite|revise|reframe|acknowledge|soften|strengthen|make (it|this|that) clear|make sure|ensure|consider|answer (their|the|this)|(update|edit|change|correct|fix|replace|remove|drop|expand) (the|this|that|these)|(add|include) (a|an|the|this) (line|row|bullet|sentence|paragraph|note|section|column|mention|caveat))\b/i;
+
+/**
+ * Left for somebody else to fill in, which is the work the copy is supposed to
+ * have done. Both bracket rules want whitespace inside, so a markdown link
+ * (`[Railway](url)`) and a variable (`${PORT}`) stay copy rather than becoming
+ * blanks.
+ */
+const PLACEHOLDER =
+  /\[[^\]]*\s[^\]]*\](?!\()|\{[^}]*\s[^}]*\}|\bTBD\b|\bTODO\b|\bXXX\b|\.\.\.|\u2026/i;
+
+/** A row of a comparison table, which says its piece in far fewer words. */
+function isTableRow(copy: string): boolean {
+  return copy.startsWith("|") && copy.split("|").length >= 3;
+}
+
+/** Why a piece of proposed copy is not something anybody could paste. */
+export type CopyFault = "missing" | "too_short" | "instruction" | "placeholder";
+
+/**
+ * Is this the edit, or a note asking for the edit?
+ *
+ * `update_pages` exists to hand marketing a finished line, so the copy is held
+ * to being one: long enough to be a sentence, written as the page rather than
+ * about it, and with nothing in it for a reader to resolve. The voice it is
+ * written in cannot be checked here – that is what reading the page is for –
+ * but everything that makes copy unpasteable can be.
+ */
+export function copyFault(text: string | undefined): CopyFault | null {
+  const copy = (text ?? "").trim();
+  if (copy.length === 0) return "missing";
+  if (copy.length < MIN_PROPOSED_CHARS && !isTableRow(copy)) return "too_short";
+  if (INSTRUCTION_LEAD.test(copy)) return "instruction";
+  if (PLACEHOLDER.test(copy)) return "placeholder";
+  return null;
+}
+
+const COPY_FAULT_REASON: Record<CopyFault, string> = {
+  missing: "it says what to change but never writes the copy to change it to",
+  too_short: "the copy it proposes is too short to be the line it is asking somebody to paste",
+  instruction:
+    "it proposes an instruction rather than copy: the text has to read as the page reads, not as a note about the page",
+  placeholder: "the copy it proposes leaves a placeholder for somebody else to fill in",
+};
+
 function isProductAction(action: RecommendedAction): boolean {
   return action.type === "consider_enhancing" || action.type === "consider_building";
 }
@@ -243,9 +305,10 @@ function checkEvidence(
 }
 
 /**
- * A page action has to name a page somebody owns and say what it should say.
- * The claim it quotes has to be on that page, too: a compare page that no
- * longer says the thing being corrected has already been fixed.
+ * A page action has to name a page somebody owns, say what it should say, and
+ * write the words it should say them in. The claim it quotes has to be on that
+ * page, too: a compare page that no longer says the thing being corrected has
+ * already been fixed.
  */
 function checkPageAction(
   action: RecommendedAction,
@@ -263,6 +326,22 @@ function checkPageAction(
   const withEdit = editable.find((ref) => ref.suggestedEdit);
   if (!withEdit) {
     return block(action, "it names a page but not what the page should say instead");
+  }
+
+  // The copy is the recommendation. A page edit that arrives as "mention the
+  // new thing here" hands the writing back to the person reading the issue,
+  // who has none of the context the analysis just spent a whole run building.
+  const faults = editable
+    .map((ref) => copyFault(ref.proposedText))
+    .filter((fault): fault is CopyFault => fault !== null);
+  if (faults.length === editable.length) {
+    // "It wrote nothing" is the least useful complaint of the set, so a page
+    // that tried and missed is the one the open question names.
+    const worst = faults.find((fault) => fault !== "missing") ?? "missing";
+    return block(
+      action,
+      `${COPY_FAULT_REASON[worst]} (${editable.map((ref) => ref.url).join(" or ")})`,
+    );
   }
 
   const verified = editable.some((ref) => refClaimHolds(ref, context));

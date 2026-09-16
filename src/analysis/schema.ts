@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   ACTIONS,
+  EDIT_KINDS,
   IMAGE_ORIGINS,
   IMPACTS,
   type ActionIssue,
@@ -31,11 +32,21 @@ const lines = z.preprocess(
   z.array(z.string().min(1)).max(8),
 );
 
+/** A rewrite runs longer than the one-line instruction that introduces it. */
+const proposed = optionalText(1_600);
+const editKind = z.preprocess(blankAsMissing, z.enum(EDIT_KINDS).optional());
+
 const refSchema = z.object({
   url: z.string().min(1),
   claim: z.string().min(1),
   suggested_edit: optionalText(600),
   suggestedEdit: optionalText(600),
+  proposed_text: proposed,
+  proposedText: proposed,
+  replacement_text: proposed,
+  replacementText: proposed,
+  edit_kind: editKind,
+  editKind,
 });
 
 /** A citation with no page or no claim says nothing, so it goes rather than throws. */
@@ -174,10 +185,18 @@ export function normalizeAnalysis(parsed: z.infer<typeof analysisSchema>): Analy
     ...(noActionReason ? { noActionReason } : {}),
     railwayRefs: cited.map((ref) => {
       const suggestedEdit = ref.suggested_edit ?? ref.suggestedEdit;
+      const proposedText =
+        ref.proposed_text ?? ref.proposedText ?? ref.replacement_text ?? ref.replacementText;
+      const editKind = ref.edit_kind ?? ref.editKind;
       return {
         url: ref.url.trim(),
         claim: clean(ref.claim),
         ...(suggestedEdit ? { suggestedEdit: clean(suggestedEdit) } : {}),
+        // Punctuated our way like every other string, and otherwise left
+        // alone: this is the copy someone pastes, so its line breaks are part
+        // of it and trimming past them would reshape a table row or a bullet.
+        ...(proposedText ? { proposedText: sanitizeCopy(proposedText).trim() } : {}),
+        ...(editKind ? { editKind } : {}),
       };
     }),
     openQuestions: openQuestions.map(clean).filter(Boolean),

@@ -130,7 +130,7 @@ Rules:
 - That opening sentence leads with the work, not with what Railway lacks. A reader who sees only that line has to know what is being asked for:
   - consider_enhancing and consider_building: name the change first, then the gap behind it if it still fits. Good: "Add per-request billing to Serverless so an idle service costs nothing ${EN_DASH} Railway sleeps idle containers, it still bills the minute they wake." Bad: "Railway sleeps idle services but bills them per minute when awake." The bad one is true and it is evidence, but it names no change, so it belongs in a later sentence.
   - update_pages: name the page and what it should say. Good: "On the compare to render page, say Render now ships managed object storage and Railway answers it with storage buckets." Bad: "The compare page is out of date." A page action whose opening sentence does not say which page is unusable in the embed.
-- "railway_refs" cites Railway URLs from the corpus. Only cite URLs that exist in it. Include "suggested_edit" when an action is update_pages. Use an empty array when no cited page is genuinely relevant.
+- "railway_refs" cites Railway URLs from the corpus. Only cite URLs that exist in it. When an action is update_pages, the ref for the page to edit carries "suggested_edit", "proposed_text", and "edit_kind": the instruction, the copy to paste, and what to do with it. Use an empty array when no cited page is genuinely relevant.
 - "open_questions" is 0 to 3 things that change what Railway should do and that you could not settle. This is where an unproven gap goes. It is a better answer than an action, not a worse one.
 - Do not invent product facts about Railway or the competitor. If the source text is thin, say so in the summary and rate impact on what the post does show: a post with no feature visible in it is minor.
 
@@ -156,10 +156,21 @@ Every update_pages action has to be about the competitor product update in this 
   The claim you put in "railway_refs" is quoted from the page as it stands, and it is checked against the stored copy. A page that no longer says the thing you are correcting has already been fixed.
   Small launches often need no page edit at all. Where no Railway page in context discusses this launch's capability, the right answer is no update_pages and, if it matters, one open question.
   A notable or major impact is not a reason for update_pages. Plenty of real launches are consider_enhancing or consider_building only, and an alert with one honest action beats one with a page edit added to fill the line.
-Do not recommend update_pages because customers might ask about the launch, because a page could mention the news, because a feature matrix has no row for it, or because a page "could be stronger". Those are not page errors. Point at the specific page and the specific line in "railway_refs" with a "suggested_edit", and name that page in the opening sentence of "detail" as well, because that sentence is all the embed shows.
+Do not recommend update_pages because customers might ask about the launch, because a page could mention the news, because a feature matrix has no row for it, or because a page "could be stronger". Those are not page errors. Point at the specific page and the specific line in "railway_refs", and name that page in the opening sentence of "detail" as well, because that sentence is all the embed shows.
 A Railway product docs page is evidence for what Railway ships, never a page to edit. The only pages update_pages may target are:
 ${EDITABLE_PAGES}
-  A "suggested_edit" on any other docs.railway.com URL is always the wrong answer.
+  A page edit on any other docs.railway.com URL is always the wrong answer.
+
+What an update_pages action hands over. The edit is finished copy, not a note asking somebody to write it. Nobody who picks this up should have to word anything themselves:
+1. Open that page's own file in the workspace and read all of it. The excerpts below are a paragraph or two, and you cannot write in a page's voice from a paragraph of it.
+2. Quote what the page says today into "claim", word for word. That line is where the edit lands, and it is checked against the stored page.
+3. Write the copy into "proposed_text": the page as it should read, in full sentences, with the competitor and the capability named, ready to paste. "Say Render now bills per request" is an instruction and fails this. "Render bills a web service per request once it goes idle. Railway stops an idle container and bills it by the minute while it is awake." is the edit.
+4. Set "edit_kind" to "replace" when that copy takes the place of the line in "claim", or "insert" when it goes in next to it.
+5. Keep "suggested_edit" as the one-line version of what the edit achieves. It summarizes the copy; it never stands in for it.
+
+Write "proposed_text" in the page's voice rather than your own. Match what you read on it: how long its sentences run, whether it makes its case in paragraphs, table rows, or bullets, what it calls Railway and what it calls the competitor, whether it addresses the reader as "you", how it heads a section. A replacement for a table row is a table row with the same columns. A replacement for a one-line bullet is a one-line bullet. The bar is that a reader cannot tell which sentence on the page is yours.
+Leave nothing for anyone to fill in: no placeholders, no square brackets, no "add something about X", and no number you did not read off a page in front of you.
+The writing rules below apply to this copy too. Where the page's own rhythm and vocabulary differ from how you would put it, the page wins.
 
 Writing style, which every string you write has to follow:
 - Write like an engineer explaining something to another engineer. Clear beats clever.
@@ -187,7 +198,15 @@ export const RESPONSE_SHAPE = `{
     }
   ],
   "no_action_reason": "string (one sentence; required when actions is empty)",
-  "railway_refs": [{ "url": "string", "claim": "string", "suggested_edit": "string (optional)" }],
+  "railway_refs": [
+    {
+      "url": "string",
+      "claim": "string (what the page says today, quoted word for word)",
+      "suggested_edit": "string (one line on what the edit achieves; required for update_pages)",
+      "proposed_text": "string (the copy to paste, in that page's voice; required for update_pages)",
+      "edit_kind": "replace" | "insert"
+    }
+  ],
   "open_questions": ["string"]
 }`;
 
@@ -230,7 +249,7 @@ ${truncate(toc, MAX_TOC_CHARS)}
     : ""
 }
 ## Indexed Railway compare and migrate pages that mention ${competitor.label}
-Marketing copy, and the only pages an update_pages action may target. Not evidence of what the product does.
+Marketing copy, and the only pages an update_pages action may target. Not evidence of what the product does. A paragraph each, so open the page's file in the workspace and read the rest of it before you write copy for it.
 ${renderClaims(context.claims ?? [])}
 
 ## What ${competitor.label} says about Railway on their own pages

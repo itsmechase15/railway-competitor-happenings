@@ -50,11 +50,30 @@ export interface StoredItem extends CandidateItem {
   id: string;
 }
 
+/**
+ * Whether the copy an action proposes takes the place of the line it quotes,
+ * or goes in beside it. A page that says the wrong thing needs a replacement;
+ * a page that is silent on the launch needs a new line.
+ */
+export const EDIT_KINDS = ["replace", "insert"] as const;
+export type EditKind = (typeof EDIT_KINDS)[number];
+
 /** A Railway page an action cites, with the edit it asks for when there is one. */
 export interface RailwayRef {
   url: string;
+  /** The copy on the page today, quoted verbatim. Checked against the stored page. */
   claim: string;
+  /** One line saying what the edit has to achieve. */
   suggestedEdit?: string;
+  /**
+   * The edit itself, as finished copy a person pastes onto the page without
+   * writing anything of their own, in that page's own voice. An `update_pages`
+   * action with no proposed copy is dropped: an instruction to go and write
+   * something is the work, not the recommendation.
+   */
+  proposedText?: string;
+  /** What to do with `proposedText`. Defaults to replacing the quoted claim. */
+  editKind?: EditKind;
 }
 
 export interface Analysis {

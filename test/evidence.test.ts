@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  copyFault,
   coverageMisses,
   gateActions,
   isDocumentationOnlyAction,
@@ -279,7 +280,11 @@ describe("checking a page edit", () => {
       "On the compare to render page, say Railway stops an idle container while Render keeps it running.",
   };
 
-  it("files a page edit that names a page, the copy today, and what to say", () => {
+  /** The copy a page edit is expected to carry: the finished line, not a note. */
+  const EXACT_COPY =
+    "Render bills a web service per request once it goes idle. Railway stops an idle container and bills it by the minute while it is awake.";
+
+  it("files a page edit that names a page, the copy today, and the copy to paste", () => {
     const { blocked } = gateActions(
       withAction(pageAction, {
         railwayRefs: [
@@ -287,6 +292,8 @@ describe("checking a page edit", () => {
             url: "https://docs.railway.com/platform/compare-to-render",
             claim: "Railway stops an idle container; Render keeps it running.",
             suggestedEdit: "Name the per-request billing Render now offers.",
+            proposedText: EXACT_COPY,
+            editKind: "replace",
           },
         ],
       }),
@@ -335,12 +342,146 @@ describe("checking a page edit", () => {
             url: "https://docs.railway.com/platform/compare-to-render",
             claim: "Railway has no way to stop an idle container.",
             suggestedEdit: "Say Railway stops idle containers.",
+            proposedText: EXACT_COPY,
           },
         ],
       }),
       context(),
     );
     expect(blocked[0]?.reason).toContain("is not on");
+  });
+
+  it("drops a page edit that never writes the copy it wants pasted", () => {
+    const { blocked } = gateActions(
+      withAction(pageAction, {
+        railwayRefs: [
+          {
+            url: "https://docs.railway.com/platform/compare-to-render",
+            claim: "Railway stops an idle container; Render keeps it running.",
+            suggestedEdit: "Name the per-request billing Render now offers.",
+          },
+        ],
+      }),
+      context(),
+    );
+    expect(blocked[0]?.reason).toContain("never writes the copy");
+  });
+
+  it("drops a page edit whose copy is another instruction in disguise", () => {
+    const { blocked } = gateActions(
+      withAction(pageAction, {
+        railwayRefs: [
+          {
+            url: "https://docs.railway.com/platform/compare-to-render",
+            claim: "Railway stops an idle container; Render keeps it running.",
+            suggestedEdit: "Name the per-request billing Render now offers.",
+            proposedText: "Mention that Render now bills a web service per request when idle.",
+          },
+        ],
+      }),
+      context(),
+    );
+    expect(blocked[0]?.reason).toContain("instruction rather than copy");
+  });
+
+  it("drops a page edit whose copy leaves a blank for somebody to fill in", () => {
+    const { blocked } = gateActions(
+      withAction(pageAction, {
+        railwayRefs: [
+          {
+            url: "https://docs.railway.com/platform/compare-to-render",
+            claim: "Railway stops an idle container; Render keeps it running.",
+            suggestedEdit: "Name the per-request billing Render now offers.",
+            proposedText:
+              "Render bills a web service per request once it goes idle. Railway [describe Railway's billing here].",
+          },
+        ],
+      }),
+      context(),
+    );
+    expect(blocked[0]?.reason).toContain("placeholder");
+  });
+
+  it("takes the copy from whichever cited page carries it", () => {
+    const { blocked } = gateActions(
+      withAction(pageAction, {
+        railwayRefs: [
+          {
+            url: "https://docs.railway.com/platform/compare-to-vercel",
+            claim: "Railway and Vercel both deploy from a repository.",
+            suggestedEdit: "Leave this page alone for now.",
+          },
+          {
+            url: "https://docs.railway.com/platform/compare-to-render",
+            claim: "Railway stops an idle container; Render keeps it running.",
+            suggestedEdit: "Name the per-request billing Render now offers.",
+            proposedText: EXACT_COPY,
+          },
+        ],
+      }),
+      context(),
+    );
+    expect(blocked).toEqual([]);
+  });
+});
+
+describe("telling copy from a note about copy", () => {
+  it("accepts a finished line", () => {
+    expect(
+      copyFault(
+        "Render bills a web service per request once it goes idle. Railway stops an idle container and bills it by the minute while it is awake.",
+      ),
+    ).toBeNull();
+  });
+
+  it("accepts a table row, which is what a comparison table needs back", () => {
+    expect(
+      copyFault("| Per-request billing | Yes, on idle web services | No, Railway bills by the minute |"),
+    ).toBeNull();
+    // Three short cells are a finished row, so the length floor does not apply.
+    expect(copyFault("| Per-request billing | Yes | No |")).toBeNull();
+  });
+
+  /** A migrate page is a how-to, and its own copy is written in imperatives. */
+  it("accepts an instruction to the reader, which is what a migrate page says", () => {
+    expect(
+      copyFault("Add your environment variables to the Railway service before the first deploy."),
+    ).toBeNull();
+  });
+
+  it("accepts copy that names a variable, which is not a blank", () => {
+    expect(
+      copyFault("Railway sets ${PORT} on every service, and your app binds to it on start."),
+    ).toBeNull();
+  });
+
+  it("accepts copy that links out, which is copy and not a placeholder", () => {
+    expect(
+      copyFault(
+        "Railway stops an idle container. See [Serverless](https://docs.railway.com/deployments/serverless) for how it wakes.",
+      ),
+    ).toBeNull();
+  });
+
+  it("refuses a fragment too short to be the line anybody pastes", () => {
+    expect(copyFault("Per-request billing.")).toBe("too_short");
+  });
+
+  it("refuses an instruction, however detailed", () => {
+    expect(copyFault("Update this row to say Render now bills per request on idle services.")).toBe(
+      "instruction",
+    );
+  });
+
+  it("refuses copy with a gap left in it", () => {
+    expect(copyFault("Render bills per request on idle web services, and Railway {fills this in}.")).toBe(
+      "placeholder",
+    );
+  });
+
+  it("reads nothing at all as nothing written", () => {
+    expect(copyFault(undefined)).toBe("missing");
+    expect(copyFault("   ")).toBe("missing");
   });
 });
 

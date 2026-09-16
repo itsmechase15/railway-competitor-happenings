@@ -217,15 +217,19 @@ export function enforcePageTargets(analysis: Analysis): TopicGuard {
 }
 
 /**
- * The words one page action is judged on: its own detail, plus the suggested
- * edits when it is the only page action in the analysis. Suggested edits live
- * on `railway_refs`, not on the action, so with two page actions there is no
+ * The words one page action is judged on: its own detail, plus the edits when
+ * it is the only page action in the analysis. The edits live on
+ * `railway_refs`, not on the action, so with two page actions there is no
  * telling which edit belongs to which, and only the detail is safe to read.
+ *
+ * The proposed copy counts as much as the instruction above it. It is the edit
+ * itself, written in the page's words rather than in the launch's, so it is
+ * often where the topic is plainest.
  */
 function actionText(analysis: Analysis, action: RecommendedAction, pageActions: number): string {
   if (pageActions > 1) return action.detail;
   const edits = analysis.railwayRefs
-    .map((ref) => ref.suggestedEdit)
+    .flatMap((ref) => [ref.suggestedEdit, ref.proposedText])
     .filter((edit): edit is string => Boolean(edit));
   return [action.detail, ...edits].join(" ");
 }

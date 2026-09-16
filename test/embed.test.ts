@@ -103,6 +103,46 @@ describe("the Discord embed", () => {
     );
   });
 
+  /**
+   * A page edit is a paragraph of finished copy, and a field shared with two
+   * other actions cannot hold it. The sentence names the page; the line under
+   * it says where the words are.
+   */
+  it("sends a page edit to its issue for the copy to paste", () => {
+    const verdict = analysis({
+      actions: [
+        {
+          type: "update_pages",
+          detail: "On the compare to render page, answer what Render now charges for an idle service.",
+        },
+      ],
+      railwayRefs: [
+        {
+          url: "https://docs.railway.com/platform/compare-to-render",
+          claim: "Railway stops an idle container; Render keeps it running.",
+          suggestedEdit: "Name the per-request billing Render now offers.",
+          proposedText:
+            "Render bills a web service per request once it goes idle. Railway stops an idle container and bills it by the minute while it is awake.",
+        },
+      ],
+    });
+    const embed = buildDiscordEmbed(
+      alert({ analysis: verdict, issues: issuesFor(verdict.actions, [14]) }),
+    );
+    const action = embed.fields.find((field) => field.name === ACTION_HEADING);
+
+    expect(action?.value).toContain("the compare to render page");
+    expect(action?.value).toContain("The exact copy to paste is in the issue.");
+    // The copy itself stays in the issue: the embed has no room for it.
+    expect(action?.value).not.toContain("bills it by the minute");
+  });
+
+  it("promises no copy on an action that carries none", () => {
+    const embed = buildDiscordEmbed(alert());
+    const action = embed.fields.find((field) => field.name === ACTION_HEADING);
+    expect(action?.value).not.toContain("exact copy");
+  });
+
   it("numbers the issue links, so three of them are told apart on a phone", () => {
     const verdict = analysis({
       actions: [
