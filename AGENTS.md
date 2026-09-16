@@ -61,8 +61,21 @@ drawing, which is what you want on a box with no Chromium: run
   **once** – an unconfirmed rewrite is never applied. Take away any one of those
   and it becomes the forbidden pass. See [`src/review/`](./src/review/) and the
   [Review section of PLAN.md](./PLAN.md#review-every-action-once).
-- **Zero actions is a normal answer**, rendered as **None** with a reason. Do
- not reintroduce a rule that an alert has to recommend something.
+- **Zero actions is a normal answer**, and it is a verdict rather than a blank:
+ a kind, one sentence about this launch, and the corpus pages under it. The
+ five kinds are `already_covered`, `not_a_gap`, `unverified`,
+ `dropped_on_review`, and `unanalyzed`, and
+ [`src/analysis/noAction.ts`](./src/analysis/noAction.ts) is the only place that
+ decides what they look like. Do not reintroduce a rule that an alert has to
+ recommend something, and do not add a generic line for a writer that has
+ nothing specific to say: `test/no-action.test.ts` greps `src/` for the
+ platitudes this replaced and fails on a hit. Writing one means naming the
+ capability and the page, or picking the kind that admits it does not know.
+- **"Railway already does this" is evidence, not a mood.** The comfortable
+ answer is a claim about the product, so it is checked the way a gap claim is:
+ the page has to be in the corpus, be product documentation, and contain the
+ quote. A verdict whose evidence fails is downgraded to `unverified` naming the
+ page, never kept with its pages quietly dropped.
 - **The Before/After is drawn from the corpus, never from the live page.** An
  `update_pages` issue embeds a PNG of the paragraph with the edit in it, rendered
  by [`src/media/page-edit.ts`](./src/media/page-edit.ts) from the stored corpus
