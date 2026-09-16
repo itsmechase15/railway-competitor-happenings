@@ -94,6 +94,17 @@ function configuredSteps(text: string): Step[] {
   );
 }
 
+/**
+ * The steps that actually run the pipeline, as opposed to asking Discord a
+ * question or reading the environment. These are the ones a new pipeline
+ * variable has to reach.
+ */
+function pipelineSteps(text: string): Step[] {
+  return configuredSteps(text).filter(
+    (step) => !step.run.includes("--check-discord") && !/check-env/.test(step.run),
+  );
+}
+
 describe("workflow environments", () => {
   it("ships the four workflows the plan asks for", () => {
     expect(workflows.map((workflow) => workflow.name).sort()).toEqual([
@@ -123,6 +134,33 @@ describe("workflow environments", () => {
       }
     },
   );
+
+  /**
+   * The review pass runs wherever the pipeline does, so both models it needs are
+   * handed to every step that runs it. Both are optional and default in
+   * `src/config.ts`, so an unset variable is fine and an unpassed one is a
+   * setting nobody can change without editing the workflow.
+   */
+  it.each(workflows)(
+    "$name hands the review models to every step that runs the pipeline",
+    ({ text }) => {
+      for (const step of pipelineSteps(text)) {
+        for (const name of ["REVIEW_MODEL", "UPDATER_MODEL", "REVIEW_MAX_PER_RUN"]) {
+          expect(step.env, `${name} in ${step.run}`).toContain(name);
+        }
+      }
+    },
+  );
+
+  it("finds the pipeline steps it means to check", () => {
+    const counted = workflows.map(({ name, text }) => [name, pipelineSteps(text).length]);
+    expect(Object.fromEntries(counted)).toEqual({
+      "check-secrets.yml": 0,
+      "ci.yml": 0,
+      "daily.yml": 1,
+      "force-post.yml": 1,
+    });
+  });
 
   it.each(workflows)("$name hands a bot token to every step that posts", ({ text }) => {
     for (const step of configuredSteps(text)) {

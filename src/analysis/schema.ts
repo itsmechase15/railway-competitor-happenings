@@ -4,12 +4,13 @@ import {
   EDIT_KINDS,
   IMAGE_ORIGINS,
   IMPACTS,
+  REVIEW_VERDICTS,
   type ActionIssue,
   type Analysis,
   type FeatureImage,
   type RecommendedAction,
 } from "../types.js";
-import { sanitizeCopy } from "../util/text.js";
+import { parseDate, sanitizeCopy } from "../util/text.js";
 
 /**
  * A field the model means to leave out but sends as "" instead. Read as
@@ -215,11 +216,28 @@ const issueSchema = z.object({
   number: z.number().int().nonnegative(),
 });
 
+/**
+ * The review one action got. Stored so a retry of an analysis that never
+ * reached Discord finds the verdict already there and does not review again:
+ * the loop runs once per action, not once per attempt to post it.
+ */
+const reviewSchema = z.object({
+  verdict: z.enum(REVIEW_VERDICTS),
+  model: z.string().min(1),
+  at: z.preprocess(
+    (value) => (value instanceof Date ? value.toISOString() : value),
+    z.string().min(1),
+  ),
+  reason: z.string().min(1),
+  applied: z.boolean().optional(),
+});
+
 /** One action's issue, stored in the same order as `actions`. */
 const actionIssueSchema = z.object({
   type: actionToken.optional(),
   feature,
   issue: issueSchema.optional().nullable(),
+  review: reviewSchema.optional().nullable(),
 });
 
 /**
@@ -244,10 +262,24 @@ function readActionIssues(
   actions: RecommendedAction[],
 ): ActionIssue[] {
   const stored = parsed.issues ?? null;
-  return actions.map((action, index) => ({
-    action,
-    issue: stored ? (stored[index]?.issue ?? null) : null,
-  }));
+  return actions.map((action, index) => {
+    const review = stored?.[index]?.review;
+    return {
+      action,
+      issue: stored ? (stored[index]?.issue ?? null) : null,
+      ...(review
+        ? {
+            review: {
+              verdict: review.verdict,
+              model: review.model,
+              at: parseDate(review.at) ?? new Date(0),
+              reason: review.reason,
+              ...(review.applied === undefined ? {} : { applied: review.applied }),
+            },
+          }
+        : {}),
+    };
+  });
 }
 
 export function parseStoredAlert(raw: unknown): StoredAlertPayload {
@@ -268,10 +300,11 @@ export function serializeAlertPayload(
   return {
     ...analysis,
     image,
-    issues: issues.map(({ action, issue }) => ({
+    issues: issues.map(({ action, issue, review }) => ({
       type: action.type,
       ...(action.feature ? { feature: action.feature } : {}),
       issue,
+      ...(review ? { review: { ...review, at: review.at.toISOString() } } : {}),
     })),
   };
 }

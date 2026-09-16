@@ -4,10 +4,12 @@ import { enforceUpdatePagesTopic } from "../src/analysis/relevance.js";
 import {
   extractJsonObject,
   parseAnalysis,
+  parseStoredAlert,
+  serializeAlertPayload,
   UNSTATED_NO_ACTION_REASON,
 } from "../src/analysis/schema.js";
 import { claimsGap, verifyAgainstDocs } from "../src/analysis/verify.js";
-import type { RailwayDoc } from "../src/types.js";
+import type { RailwayDoc, RecommendedAction } from "../src/types.js";
 import { analysis, storedItem } from "./helpers.js";
 
 const serverlessDocs: RailwayDoc[] = [
@@ -386,5 +388,92 @@ describe("making an action open with the work", () => {
       }),
     );
     expect(notes).toEqual([]);
+  });
+});
+
+/**
+ * The stored verdict is what stops a retry reviewing an action twice, so it has
+ * to survive the round trip through the analysis row.
+ */
+describe("the review stored on an analysis row", () => {
+  const payload = (issues: unknown) => ({
+    impact: "notable",
+    summary: "Render now bills an idle web service per request.",
+    actions: [
+      { type: "update_pages", detail: "On the compare to render page, name the new meter." },
+    ],
+    railway_refs: [],
+    issues,
+  });
+
+  it("reads back the review each action got", () => {
+    const stored = parseStoredAlert(
+      payload([
+        {
+          type: "update_pages",
+          issue: { url: "https://github.com/o/r/issues/3", number: 3 },
+          review: {
+            verdict: "revise",
+            model: "claude-fable-5-1",
+            at: "2026-09-02T09:00:00.000Z",
+            reason: "The copy it proposes is a note about the page.",
+            applied: false,
+          },
+        },
+      ]),
+    );
+
+    expect(stored.issues[0]?.review).toEqual({
+      verdict: "revise",
+      model: "claude-fable-5-1",
+      at: new Date("2026-09-02T09:00:00.000Z"),
+      reason: "The copy it proposes is a note about the page.",
+      applied: false,
+    });
+  });
+
+  it("reads an action nobody reviewed as one a later run may review", () => {
+    const stored = parseStoredAlert(payload([{ type: "update_pages", issue: null }]));
+    // Absent, not null.
+    expect(stored.issues[0]?.review).toBeUndefined();
+  });
+
+  it("reads a review the in-memory store never serialized to JSON", () => {
+    const at = new Date("2026-09-02T09:00:00.000Z");
+    const stored = parseStoredAlert(
+      payload([
+        { type: "update_pages", issue: null, review: { verdict: "agree", model: "m", at, reason: "r" } },
+      ]),
+    );
+    expect(stored.issues[0]?.review?.at).toEqual(at);
+  });
+
+  it("refuses a stored verdict that is not one of the three", () => {
+    expect(() =>
+      parseStoredAlert(
+        payload([
+          {
+            type: "update_pages",
+            review: { verdict: "maybe", model: "m", at: "2026-09-02T09:00:00.000Z", reason: "r" },
+          },
+        ]),
+      ),
+    ).toThrow();
+  });
+
+  it("writes the verdict back out, so the next attempt to post finds it", () => {
+    const verdict = {
+      verdict: "agree" as const,
+      model: "claude-fable-5-1",
+      at: new Date("2026-09-02T09:00:00.000Z"),
+      reason: "It stands.",
+    };
+    const verdicts = analysis();
+    const [action] = verdicts.actions as [RecommendedAction];
+    const written = serializeAlertPayload(verdicts, null, [
+      { action, issue: null, review: verdict },
+    ]);
+    const round = parseStoredAlert(written);
+    expect(round.issues[0]?.review).toEqual(verdict);
   });
 });

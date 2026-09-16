@@ -26,7 +26,11 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The analyst reads its way around Railway's whole docs corpus per item, and
+    # every action it files then gets a reviewer run of its own over the same
+    # corpus, with a rewrite for the ones that need correcting. That is where the
+    # extra quarter of an hour goes.
+    timeout-minutes: 45
     steps:
       - name: Check it is not before 07:00 in America/Los_Angeles
         id: window
@@ -80,7 +84,14 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
-          # Provided by Actions; opens the issue each embed links to.
+          # The review pass. All three are optional: unset falls back to the
+          # defaults in src/config.ts, which are claude-fable-5-1 reviewing and
+          # the analyst's own model rewriting.
+          REVIEW_MODEL: ${{ vars.REVIEW_MODEL }}
+          UPDATER_MODEL: ${{ vars.UPDATER_MODEL }}
+          REVIEW_MAX_PER_RUN: ${{ vars.REVIEW_MAX_PER_RUN }}
+          # Provided by Actions; opens the issue each embed links to, and writes
+          # the review verdict back onto it.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           # A channel id is not really a secret, but it is easy to store as one,

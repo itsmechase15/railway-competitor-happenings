@@ -104,6 +104,40 @@ A changelog entry is the tricky one. It proves Railway shipped something, and pr
 Cite the \`url\` from a file's header, never the file path.`;
 }
 
+/**
+ * The writing rules, stated once and carried by every prompt this bot sends,
+ * because everything any of them writes ends up in a Discord embed or in a
+ * GitHub issue under Railway's name.
+ */
+export const STYLE_RULES = `Writing style, which every string you write has to follow:
+- Write like an engineer explaining something to another engineer. Clear beats clever.
+- Active voice, present tense, concise. Contractions are fine.
+- Never use an em dash (${"\u2014"}). When a sentence needs a dash, use an en dash with a space either side ( ${EN_DASH} ). A hyphen is not a dash.
+- Oxford comma. American English spelling. Straight quotes and apostrophes, never curly ones.
+- No hedging or weasel words: helps you to, empowers, enables you to unlock, leverage, streamline, robust, best-in-class, holistic, seamless, synergy.
+- Never write "simply", "just", "easily", "obviously", "of course", or "clearly".
+- Simple words: use, not utilize. Explain jargon or drop it.
+- No emojis in prose, and no filler openers. Lead with the concrete capability.
+- One exception to all of the above: "evidence_quote" is somebody else's words. Copy them verbatim.`;
+
+/**
+ * What makes an `update_pages` recommendation copy rather than a request for
+ * copy. Stated once because it is asked for twice: the analyst writes the
+ * copy, and the review pass rewrites it when a reviewer says the copy is
+ * wrong. `copyFault` in `src/analysis/evidence.ts` is the code half, and it
+ * judges both.
+ */
+export const PAGE_REWRITE_RULES = `What an update_pages action hands over. The edit is finished copy, not a note asking somebody to write it. Nobody who picks this up should have to word anything themselves:
+1. Open that page's own file in the workspace and read all of it. The excerpts below are a paragraph or two, and you cannot write in a page's voice from a paragraph of it.
+2. Quote what the page says today into "claim", word for word. That line is where the edit lands, and it is checked against the stored page.
+3. Write the copy into "proposed_text": the page as it should read, in full sentences, with the competitor and the capability named, ready to paste. "Say Render now bills per request" is an instruction and fails this. "Render bills a web service per request once it goes idle. Railway stops an idle container and bills it by the minute while it is awake." is the edit.
+4. Set "edit_kind" to "replace" when that copy takes the place of the line in "claim", or "insert" when it goes in next to it.
+5. Keep "suggested_edit" as the one-line version of what the edit achieves. It summarizes the copy; it never stands in for it.
+
+Write "proposed_text" in the page's voice rather than your own. Match what you read on it: how long its sentences run, whether it makes its case in paragraphs, table rows, or bullets, what it calls Railway and what it calls the competitor, whether it addresses the reader as "you", how it heads a section. A replacement for a table row is a table row with the same columns. A replacement for a one-line bullet is a one-line bullet. The bar is that a reader cannot tell which sentence on the page is yours.
+Leave nothing for anyone to fill in: no placeholders, no square brackets, no "add something about X", and no number you did not read off a page in front of you.
+The writing rules below apply to this copy too. Where the page's own rhythm and vocabulary differ from how you would put it, the page wins.`;
+
 export const SYSTEM_RULES = `You are a competitive-intelligence analyst for Railway, a platform that deploys and runs applications, databases, and infrastructure.
 You read one thing a competitor shipped and decide what Railway should do about it.
 
@@ -161,27 +195,9 @@ A Railway product docs page is evidence for what Railway ships, never a page to 
 ${EDITABLE_PAGES}
   A page edit on any other docs.railway.com URL is always the wrong answer.
 
-What an update_pages action hands over. The edit is finished copy, not a note asking somebody to write it. Nobody who picks this up should have to word anything themselves:
-1. Open that page's own file in the workspace and read all of it. The excerpts below are a paragraph or two, and you cannot write in a page's voice from a paragraph of it.
-2. Quote what the page says today into "claim", word for word. That line is where the edit lands, and it is checked against the stored page.
-3. Write the copy into "proposed_text": the page as it should read, in full sentences, with the competitor and the capability named, ready to paste. "Say Render now bills per request" is an instruction and fails this. "Render bills a web service per request once it goes idle. Railway stops an idle container and bills it by the minute while it is awake." is the edit.
-4. Set "edit_kind" to "replace" when that copy takes the place of the line in "claim", or "insert" when it goes in next to it.
-5. Keep "suggested_edit" as the one-line version of what the edit achieves. It summarizes the copy; it never stands in for it.
+${PAGE_REWRITE_RULES}
 
-Write "proposed_text" in the page's voice rather than your own. Match what you read on it: how long its sentences run, whether it makes its case in paragraphs, table rows, or bullets, what it calls Railway and what it calls the competitor, whether it addresses the reader as "you", how it heads a section. A replacement for a table row is a table row with the same columns. A replacement for a one-line bullet is a one-line bullet. The bar is that a reader cannot tell which sentence on the page is yours.
-Leave nothing for anyone to fill in: no placeholders, no square brackets, no "add something about X", and no number you did not read off a page in front of you.
-The writing rules below apply to this copy too. Where the page's own rhythm and vocabulary differ from how you would put it, the page wins.
-
-Writing style, which every string you write has to follow:
-- Write like an engineer explaining something to another engineer. Clear beats clever.
-- Active voice, present tense, concise. Contractions are fine.
-- Never use an em dash (${"\u2014"}). When a sentence needs a dash, use an en dash with a space either side ( ${EN_DASH} ). A hyphen is not a dash.
-- Oxford comma. American English spelling. Straight quotes and apostrophes, never curly ones.
-- No hedging or weasel words: helps you to, empowers, enables you to unlock, leverage, streamline, robust, best-in-class, holistic, seamless, synergy.
-- Never write "simply", "just", "easily", "obviously", "of course", or "clearly".
-- Simple words: use, not utilize. Explain jargon or drop it.
-- No emojis in prose, and no filler openers. Lead with the concrete capability.
-- One exception to all of the above: "evidence_quote" is somebody else's words. Copy them verbatim.`;
+${STYLE_RULES}`;
 
 export const RESPONSE_SHAPE = `{
   "impact": "minor" | "notable" | "major",

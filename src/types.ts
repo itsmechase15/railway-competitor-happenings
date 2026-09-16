@@ -142,6 +142,37 @@ export interface ActionIssue {
   action: RecommendedAction;
   /** Null when no issue could be opened, e.g. a dry run or a missing token. */
   issue: IssueRef | null;
+  /** Absent until a reviewer has been past this action. Set once, never twice. */
+  review?: ActionReview;
+}
+
+/**
+ * What a reviewer can say about one filed action. `agree` files it as written,
+ * `revise` sends it to be rewritten once, `drop` closes the issue.
+ */
+export const REVIEW_VERDICTS = ["agree", "revise", "drop"] as const;
+export type ReviewVerdict = (typeof REVIEW_VERDICTS)[number];
+
+/**
+ * The review one action got, stored on the analysis row.
+ *
+ * This is what makes the loop run once. A retry that finds a review here does
+ * not review again, whatever the issue's labels say, so a Discord failure
+ * cannot turn into a second reviewer run and a second rewrite of the same
+ * issue.
+ */
+export interface ActionReview {
+  verdict: ReviewVerdict;
+  /** The reviewer's model id, which is not the analyst's. */
+  model: string;
+  at: Date;
+  /** Why, in the reviewer's own words. The issue comment carries the same line. */
+  reason: string;
+  /**
+   * Whether a `revise` verdict reached the issue. False when the rewrite could
+   * not survive the evidence checks, which leaves the original filed.
+   */
+  applied?: boolean;
 }
 
 /** An analyzed item with everything Discord needs: a picture and an issue per action. */

@@ -157,8 +157,24 @@ class CursorAnalyst implements AnalystRunner {
   }
 }
 
+export interface AnalystRunnerOptions {
+  /**
+   * The model to run, when it is not the analyst's. The reviewer and the writer
+   * of the review pass are the same runner with a different model id: one run,
+   * read-only tools, JSON out.
+   */
+  model?: string;
+}
+
 /** Null when no API key is set, which is what puts the run on the fallback. */
-export function createAnalystRunner(config: Config): AnalystRunner | null {
+export function createAnalystRunner(
+  config: Config,
+  options: AnalystRunnerOptions = {},
+): AnalystRunner | null {
   if (!config.cursorApiKey) return null;
-  return new CursorAnalyst(config.cursorModel, config.cursorApiKey, config.cursorRuntime);
+  return new CursorAnalyst(
+    options.model ?? config.cursorModel,
+    config.cursorApiKey,
+    config.cursorRuntime,
+  );
 }
