@@ -7,3 +7,5 @@
 # instead, as `force_url`.
 #
 # https://render.com/changelog/some-entry
+# otto live force-post 2026-09-15
+https://vercel.com/blog/introducing-flat-rate-cdn
