@@ -63,7 +63,11 @@ export interface PageEditPlan {
 /** A Before/After the issue body can embed, once something has published the PNG. */
 export interface PageVisual {
   pageUrl: string;
-  /** The raw URL GitHub renders the image from. */
+  /**
+   * Where the reader's browser fetches the image from. A `github.com` address
+   * with no credential in it, because this repo is private and the issue has to
+   * still show the picture next week – see `src/github/artifact.ts`.
+   */
   imageUrl: string;
   altText: string;
   summary: string;

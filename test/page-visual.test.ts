@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Config } from "../src/config.js";
 import {
+  blobUrl,
+  carriesCredential,
   createArtifactWriter,
   GitHubArtifactWriter,
   LocalArtifactWriter,
@@ -295,18 +297,29 @@ const config = (overrides: Partial<Config>): Config =>
 describe("committing the picture so an issue can render it", () => {
   const png = Buffer.from("not really a png");
   const path = `${VISUAL_DIR}/platform-compare-to-render-abc1234567.png`;
-  const rawUrl = `https://raw.githubusercontent.com/o/r/main/${path}`;
+  const sha = "9f4c1b2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b";
+  const blob = `https://github.com/o/r/blob/${sha}/${path}?raw=true`;
+
+  /**
+   * What the contents API actually hands back for a private repo: a raw URL
+   * signed with a token that lasts minutes. Nothing may put this in an issue.
+   */
+  const signedRawUrl = `https://raw.githubusercontent.com/o/r/main/${path}?token=AJ7VCKEXPIRESSOON`;
 
   const writer = (): GitHubArtifactWriter => new GitHubArtifactWriter("o/r", "ghs-test", 5_000);
 
   const json = (body: unknown, status = 200): Response =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
-  it("puts the file and hands back the url the issue embeds", async () => {
-    const spy = vi.fn().mockResolvedValue(json({ content: { download_url: rawUrl } }, 201));
+  it("puts the file and hands back a url pinned to the commit it made", async () => {
+    const spy = vi
+      .fn()
+      .mockResolvedValue(
+        json({ content: { download_url: signedRawUrl }, commit: { sha } }, 201),
+      );
     vi.stubGlobal("fetch", spy);
 
-    expect(await writer().write(path, png, "Add a before/after")).toBe(rawUrl);
+    expect(await writer().write(path, png, "Add a before/after")).toBe(blob);
 
     const [url, init] = spy.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(`https://api.github.com/repos/o/r/contents/${path}`);
@@ -316,21 +329,70 @@ describe("committing the picture so an issue can render it", () => {
     expect(sent.message).toBe("Add a before/after");
   });
 
+  it("never hands back the signed raw url, however the file got there", async () => {
+    const created = vi
+      .fn()
+      .mockResolvedValue(json({ content: { download_url: signedRawUrl }, commit: { sha } }, 201));
+    vi.stubGlobal("fetch", created);
+    const fresh = await writer().write(path, png, "Add a before/after");
+
+    const reused = vi
+      .fn()
+      .mockResolvedValueOnce(json({ message: "sha wasn't supplied" }, 422))
+      .mockResolvedValueOnce(json([{ sha }]));
+    vi.stubGlobal("fetch", reused);
+    const existing = await writer().write(path, png, "Add a before/after");
+
+    for (const url of [fresh, existing]) {
+      expect(url).not.toContain("raw.githubusercontent.com");
+      expect(url).not.toContain("token=");
+      expect(carriesCredential(url!)).toBe(false);
+      expect(url).toMatch(/^https:\/\/github\.com\/o\/r\/blob\//);
+    }
+  });
+
   it("reuses the copy an earlier run already committed at that path", async () => {
     const spy = vi
       .fn()
       .mockResolvedValueOnce(json({ message: "sha wasn't supplied" }, 422))
-      .mockResolvedValueOnce(json({ download_url: rawUrl }));
+      .mockResolvedValueOnce(json([{ sha }]));
     vi.stubGlobal("fetch", spy);
 
-    expect(await writer().write(path, png, "Add a before/after")).toBe(rawUrl);
+    expect(await writer().write(path, png, "Add a before/after")).toBe(blob);
     expect(spy).toHaveBeenCalledTimes(2);
-    expect((spy.mock.calls[1]?.[1] as RequestInit).method).toBe("GET");
+
+    const [url, init] = spy.mock.calls[1] as [string, RequestInit];
+    expect(init.method).toBe("GET");
+    expect(url).toBe(
+      `https://api.github.com/repos/o/r/commits?per_page=1&path=${encodeURIComponent(path)}`,
+    );
+  });
+
+  it("falls back to the file's own page when the history cannot be read", async () => {
+    const htmlUrl = `https://github.com/o/r/blob/main/${path}`;
+    const spy = vi
+      .fn()
+      .mockResolvedValueOnce(json({ message: "sha wasn't supplied" }, 422))
+      .mockResolvedValueOnce(json({ message: "Not Found" }, 404))
+      .mockResolvedValueOnce(json({ html_url: htmlUrl, download_url: signedRawUrl }));
+    vi.stubGlobal("fetch", spy);
+
+    expect(await writer().write(path, png, "Add a before/after")).toBe(`${htmlUrl}?raw=true`);
   });
 
   it("gives back nothing, rather than throwing, when the commit is refused", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ message: "Bad credentials" }, 401)));
     expect(await writer().write(path, png, "Add a before/after")).toBeNull();
+  });
+
+  it("knows which urls carry something that expires", () => {
+    expect(carriesCredential(signedRawUrl)).toBe(true);
+    expect(carriesCredential("https://private-user-images.githubusercontent.com/1/x.png?jwt=ey")).toBe(
+      true,
+    );
+    expect(carriesCredential(blob)).toBe(false);
+    expect(carriesCredential(blobUrl("o/r", sha, path))).toBe(false);
+    expect(carriesCredential("not a url at all")).toBe(false);
   });
 
   it("writes nowhere in a dry run, and nowhere without a token", () => {
@@ -354,7 +416,7 @@ describe("committing the picture so an issue can render it", () => {
 describe("the picture on the issue", () => {
   const visual: PageVisual = {
     pageUrl: COMPARE_URL,
-    imageUrl: `https://raw.githubusercontent.com/o/r/main/${VISUAL_DIR}/x.png`,
+    imageUrl: `https://github.com/o/r/blob/9f4c1b2d3e/${VISUAL_DIR}/x.png?raw=true`,
     altText: "Before and after of the compare to render page: 16 words added",
     summary: "16 words added, 13 words removed",
   };

@@ -370,11 +370,28 @@ Before panel is the text the analyst read and the evidence gate checked the quot
 against, which is the copy somebody reviewed; the live page is neither, and
 pointing a browser at railway.com every morning to edit its DOM buys nothing.
 
-GitHub renders an image it can fetch, so the PNG is committed to
+A browser renders an image it can fetch, so the PNG is committed to
 `artifacts/update-pages/` through the contents API before the issue is opened.
 That is the only write this app makes to the repo, and it is why the two pipeline
 workflows grant `contents: write`. The file name is a hash of the page and both
 sides of the edit: a re-run reuses it, a rewrite gets a new one.
+
+This repo is private, and that decides the URL the issue embeds. It is
+`github.com/<repo>/blob/<commit sha>/<path>?raw=true`, an address the reader's
+own browser authenticates with the github.com session it already has: GitHub
+serves its own URLs directly rather than through the camo image proxy, which
+fetches anonymously and so could never read a private repo, and a commit SHA
+never moves. What the issue must never embed is the contents API's
+`download_url`, a `raw.githubusercontent.com` URL carrying a signed token that
+lasts minutes – it renders while the run is still going and 404s for the person
+who opens the issue tomorrow. Code refuses any URL with a credential in its
+query rather than trusting the writer not to return one, and a refused URL costs
+the picture, not the issue.
+
+GitHub's own paste flow, `github.com/user-attachments/assets/<uuid>`, would be
+the nicer answer and is not available: its upload endpoint answers 404 to the
+Actions `GITHUB_TOKEN` at any permission level, and taking it would mean keeping
+a human's personal access token in the secrets to post a picture.
 
 Page actions only. There is no before and after of a feature that does not exist,
 so `consider_enhancing` and `consider_building` never get one.
