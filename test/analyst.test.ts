@@ -145,6 +145,70 @@ describe("one reply, end to end", () => {
   });
 
   /**
+   * A page edit ends as copy somebody pastes. The reply writes the line, the
+   * gate keeps it because it is a line rather than a note about one, and the
+   * issue carries it in a block nobody has to retype.
+   */
+  it("carries a page edit's exact copy through to the issue", () => {
+    const proposed =
+      "Render bills a web service per request once it goes idle. Railway stops an idle container and bills it by the minute while it is awake.";
+    const { analysis } = run(
+      reply({
+        impact: "notable",
+        summary: "Render now bills an idle service per request rather than per minute.",
+        actions: [
+          {
+            type: "update_pages",
+            detail:
+              "On the compare to render page, replace the idle-container line with what Render now charges for an idle service.",
+          },
+        ],
+        railway_refs: [
+          {
+            url: "https://docs.railway.com/platform/compare-to-render",
+            claim: "Railway stops an idle container; Render keeps it running.",
+            suggested_edit: "Name the per-request billing Render now offers.",
+            proposed_text: proposed,
+            edit_kind: "replace",
+          },
+        ],
+      }),
+    );
+
+    expect(analysis.actions).toHaveLength(1);
+    const [draft] = buildIssueDrafts({ item: storedItem(), analysis, model: "test" }, null);
+    expect(draft?.draft.body).toContain("Replace the copy above with this, word for word:");
+    expect(draft?.draft.body).toContain(proposed);
+  });
+
+  it("opens no issue for a page edit that only says what to write", () => {
+    const { analysis, notes } = run(
+      reply({
+        impact: "notable",
+        summary: "Render now bills an idle service per request rather than per minute.",
+        actions: [
+          {
+            type: "update_pages",
+            detail:
+              "On the compare to render page, mention that Render now bills an idle service per request rather than per minute.",
+          },
+        ],
+        railway_refs: [
+          {
+            url: "https://docs.railway.com/platform/compare-to-render",
+            claim: "Railway stops an idle container; Render keeps it running.",
+            suggested_edit: "Name the per-request billing Render now offers.",
+          },
+        ],
+      }),
+    );
+
+    expect(analysis.actions).toEqual([]);
+    expect(notes.some((note) => note.includes("never writes the copy"))).toBe(true);
+    expect(buildIssueDrafts({ item: storedItem(), analysis, model: "test" }, null)).toHaveLength(0);
+  });
+
+  /**
    * The regression this design exists for. The claim is well argued, the page
    * it cites is real, and the quote is on it – and the docs answer the gap on
    * a page the analysis never opened. No issue is filed for it.
