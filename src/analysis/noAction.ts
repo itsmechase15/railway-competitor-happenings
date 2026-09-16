@@ -58,9 +58,12 @@ export interface NoActionRenderOptions {
   product?: string;
 }
 
+/** Long enough for a docs page title, short enough not to fill the block. */
+const MAX_LABEL_CHARS = 140;
+
 /** The label on an evidence link: the page's own title, or its path. */
 export function evidenceLabel(evidence: NoActionEvidence): string {
-  return evidence.title?.trim() || pageNameFromUrl(evidence.url);
+  return truncate(evidence.title?.trim() || pageNameFromUrl(evidence.url), MAX_LABEL_CHARS);
 }
 
 /**

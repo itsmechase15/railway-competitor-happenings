@@ -140,6 +140,40 @@ describe("reading a model reply", () => {
     expect(verdict.noActionReason).toBe(verdict.noAction?.reason);
   });
 
+  /**
+   * The verdict is stored on the analysis row, so a retry that replays it
+   * renders the same title and the same pages rather than falling back to a
+   * bare sentence.
+   */
+  it("reads a verdict back off a stored row unchanged", () => {
+    const verdict = parseStoredAlert(
+      serializeAlertPayload(
+        {
+          impact: "notable",
+          summary: "Render raised the memory ceiling on its existing compute plans.",
+          keyPoints: [],
+          actions: [],
+          noAction: {
+            kind: "already_covered",
+            reason: "Railway already offers memory-heavy plan shapes on every tier.",
+            evidence: [{ url: "https://docs.railway.com/deployments/scaling", title: "Scaling" }],
+          },
+          noActionReason: "Railway already offers memory-heavy plan shapes on every tier.",
+          railwayRefs: [],
+          openQuestions: [],
+        },
+        null,
+        [],
+      ),
+    );
+
+    expect(verdict.analysis.noAction).toEqual({
+      kind: "already_covered",
+      reason: "Railway already offers memory-heavy plan shapes on every tier.",
+      evidence: [{ url: "https://docs.railway.com/deployments/scaling", title: "Scaling" }],
+    });
+  });
+
   it("keeps the sentence but not the title when a model invents a kind", () => {
     const verdict = parseAnalysis(
       JSON.stringify({
