@@ -75,7 +75,8 @@ function withAction(action: RecommendedAction, overrides: Partial<Analysis> = {}
  * Every check here exists to stop one issue being opened: "Railway should
  * build X", filed against a Railway that already ships X. That issue costs a
  * reader's trust in every alert after it, so an action that cannot be checked
- * is dropped and what it claimed becomes an open question instead.
+ * is dropped, and what stopped it becomes the verdict a reader sees – or an
+ * open question, when other actions survived to carry the alert.
  */
 describe("checking the evidence a product action rests on", () => {
   it("files an action whose page, quote, and gap all hold up", () => {
@@ -96,7 +97,8 @@ describe("checking the evidence a product action rests on", () => {
 
     expect(gated.actions).toEqual([]);
     expect(blocked[0]?.reason).toContain("does not say what Railway cannot do");
-    expect(gated.openQuestions.join(" ")).toContain("does not say what Railway cannot do");
+    // The verdict carries the reason, so it is not said twice.
+    expect(gated.noAction?.reason).toContain("does not say what Railway cannot do");
   });
 
   it("drops an action that cites no docs page for its gap", () => {
@@ -486,15 +488,63 @@ describe("telling copy from a note about copy", () => {
 });
 
 describe("what a reader gets when everything is dropped", () => {
-  it("says there is nothing to do, and why, rather than going out blank", () => {
+  /**
+   * The verdict names the gap that was claimed and the check it failed, which
+   * is the difference between "Railway ships this" and "nobody could tell".
+   */
+  it("says the gap could not be confirmed, and which check said so", () => {
     const { analysis: gated } = gateActions(
       withAction(enhancing({ evidenceUrl: "https://docs.railway.com/invented-page" })),
       context(),
     );
 
     expect(gated.actions).toEqual([]);
-    expect(gated.noActionReason).toContain("survived the evidence checks");
-    expect(gated.openQuestions.length).toBeGreaterThan(0);
+    expect(gated.noAction?.kind).toBe("unverified");
+    expect(gated.noAction?.reason).toContain("as a gap, but it cites");
+    expect(gated.noAction?.reason).toContain("not a page in Railway's docs corpus");
+    expect(gated.noActionReason).toBe(gated.noAction?.reason);
+  });
+
+  /**
+   * "Railway already does this" is the answer a reader is after, so a gap the
+   * corpus answers on a page nobody opened says exactly that, with the page.
+   */
+  it("says Railway already does this when the docs answer the gap elsewhere", () => {
+    const { analysis: gated } = gateActions(
+      withAction(
+        enhancing({
+          feature: "Enterprise and compliance",
+          detail: "Add a consent decision per workspace so analytics can be turned off.",
+          gap: "Railway records no analytics consent decision and honors no do-not-track header",
+          evidenceUrl: "https://docs.railway.com/volumes",
+          evidenceQuote: "A volume attaches a persistent disk to exactly one service.",
+        }),
+      ),
+      context(),
+    );
+
+    expect(gated.actions).toEqual([]);
+    expect(gated.noAction?.kind).toBe("already_covered");
+    expect(gated.noAction?.reason).toContain("Railway documents this already");
+    // Titled off the corpus row, so the link reads as the page rather than a URL.
+    expect(gated.noAction?.evidence).toEqual([
+      { url: "https://docs.railway.com/enterprise/privacy", title: "Privacy and consent" },
+    ]);
+  });
+
+  /**
+   * A gap about money is not a gap at all, and saying "could not be confirmed"
+   * about one would invite somebody to go and confirm it.
+   */
+  it("says not a product gap when the only thing recommended was about price", () => {
+    const { analysis: gated } = gateActions(
+      withAction(enhancing({ gap: "Render's free tier is cheaper than Railway's" })),
+      context(),
+    );
+
+    expect(gated.actions).toEqual([]);
+    expect(gated.noAction?.kind).toBe("not_a_gap");
+    expect(gated.noAction?.reason).toContain("what a competitor charges");
   });
 });
 

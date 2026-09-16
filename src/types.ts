@@ -83,6 +83,55 @@ export interface RailwayRef {
   editKind?: EditKind;
 }
 
+/**
+ * Why an alert recommends nothing.
+ *
+ * `already_covered` is Railway shipping the thing, which is the answer a reader
+ * most wants and the only one that has to carry docs pages. `not_a_gap` is a
+ * launch that asks nothing of the product: pricing, company news, a capability
+ * Railway chose not to build. `unverified` is a gap claim that could not be
+ * checked, which is not the same as no gap and says so. `dropped_on_review` is
+ * the second model closing every issue the first one filed, and `unanalyzed` is
+ * a run with no model behind it.
+ */
+export const NO_ACTION_KINDS = [
+  "already_covered",
+  "not_a_gap",
+  "unverified",
+  "dropped_on_review",
+  "unanalyzed",
+] as const;
+export type NoActionKind = (typeof NO_ACTION_KINDS)[number];
+
+/** A page the verdict rests on, so a reader can go and read it. */
+export interface NoActionEvidence {
+  url: string;
+  /** The page's own title, which is what a link is labelled with. */
+  title?: string;
+  /** Words from the page, checked against the stored copy like any other quote. */
+  quote?: string;
+}
+
+/**
+ * Zero actions as an answer rather than a blank.
+ *
+ * The kind picks the title, the reason is the sentence under it, and the
+ * evidence is the pages under that. A reason that names nothing concrete is the
+ * failure this replaces, so `already_covered` is only allowed to say Railway
+ * ships something when it can name the page that says so.
+ */
+export interface NoAction {
+  kind: NoActionKind;
+  /** One sentence: what the launch does, and what Railway ships or why it does not matter. */
+  reason: string;
+  /**
+   * The pages the verdict rests on, docs unless the answer is a page Railway
+   * publishes. Non-empty for `already_covered`, which is downgraded without
+   * them rather than published as a claim nobody can check.
+   */
+  evidence: NoActionEvidence[];
+}
+
 export interface Analysis {
   impact: Impact;
   /** One sentence. The embed shows it under "What you need to KNOW". */
@@ -96,7 +145,13 @@ export interface Analysis {
    * dropped rather than filed.
    */
   actions: RecommendedAction[];
-  /** Why there is nothing to do. Set whenever `actions` is empty. */
+  /** Why there is nothing to do, in full. Set whenever `actions` is empty. */
+  noAction?: NoAction;
+  /**
+   * The same verdict as one string. Written alongside `noAction` so a row
+   * stored before the verdict had a shape still reads, and never the thing a
+   * surface renders: the title and the links come off `noAction`.
+   */
   noActionReason?: string;
   railwayRefs: RailwayRef[];
   /** What we could not tell from the source, for whoever picks the issue up. */

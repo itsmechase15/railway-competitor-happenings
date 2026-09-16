@@ -11,12 +11,33 @@ link, an impact label (Minor / Notable / Major), a few detail bullets, and
 **zero to three** recommended actions. Each action opens its own GitHub issue
 in this repo, and the embed links it.
 
-Zero actions is a normal answer, not a failure. A competitor shipping something
-Railway already does asks nothing of Railway, and the embed says so in words:
-"None", with one sentence saying why. The mistake this bot is built to avoid is
-the opposite one – a GitHub issue telling Railway to build something Railway
-already ships – because that issue costs a reader's trust in every alert after
-it.
+Zero actions is a normal answer, not a failure, and it arrives as a verdict
+rather than a blank: a title saying which kind of nothing this is, one sentence
+about this launch, and the docs pages the verdict rests on.
+
+```
+**None – Railway already does this**
+Render's per-request billing for idle services matches what Railway Serverless
+already does: a container stops when it has no inbound traffic and starts again
+on the next request.
+See: [Serverless](https://docs.railway.com/deployments/serverless)
+```
+
+There are five kinds, each with its own title. `already_covered` is "None –
+Railway already does this", and it is the only one that has to carry pages: a
+claim about what Railway ships is checked the way a gap claim is, and a verdict
+whose pages fail becomes `unverified` instead. `not_a_gap` is "None – not a
+product gap", for pricing, company news, and a capability Railway chose not to
+build. `unverified` is "None – the gap could not be confirmed", which is not
+the same as no gap and says so. `dropped_on_review` is "None – dropped on
+review", in the reviewer's own words. `unanalyzed` is "None – not analyzed this
+run". Rendering happens once, in
+[`src/analysis/noAction.ts`](./src/analysis/noAction.ts), so the Discord embed
+and a closed GitHub issue say the same three things.
+
+The mistake this bot is built to avoid is the opposite one – a GitHub issue
+telling Railway to build something Railway already ships – because that issue
+costs a reader's trust in every alert after it.
 
 So every recommendation carries evidence, and the evidence is checked rather
 than trusted. A product action names the gap in one line, cites the docs page

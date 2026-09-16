@@ -17,7 +17,8 @@ how big it is, and the zero to three things Railway should do about it. Each
 action opens a GitHub issue so the work lands on a desk.
 
 Zero is a real answer. A competitor shipping something Railway already does
-asks nothing of Railway, and the alert says "None" with one sentence on why.
+asks nothing of Railway, and the alert says so with a title naming which kind
+of nothing it is, one sentence about this launch, and the docs pages under it.
 The failure mode that matters is the other one: an issue telling Railway to
 build something Railway already ships. One of those costs the credibility of
 every alert after it, so an action that cannot be checked against Railway's own
@@ -117,7 +118,9 @@ Embed shape, in this order and nothing else:
 4. **More detail** – two to four short bullets.
 5. **Recommended action(s)** – each action as its own field: bold title, one
    sentence that leads with the work, link to that action's own GitHub issue.
-   With no actions, one field reading **None** and one sentence saying why.
+   With no actions, one field carrying the verdict: **None – Railway already
+   does this** or one of the other four kinds, the sentence under it, and a
+   `See:` line linking the docs pages it rests on.
 6. **Footer** – competitor · source · model.
 
 Page citations, the copy a page edit proposes, and open questions live in the
@@ -251,8 +254,18 @@ against the same corpus afterwards.
 A failed check is never rewritten into a weaker action. There is no way to
 correct a claim whose basis we cannot find without inventing one, so the action
 is dropped and what it said becomes an open question. Zero actions with a
-reason is a normal outcome, and no GitHub issue is opened for anything that
+verdict is a normal outcome, and no GitHub issue is opened for anything that
 failed.
+
+Every block carries a cause as well as a sentence, because "Railway already
+ships this" and "nobody could check whether Railway ships this" are different
+answers and only a token tells them apart in code. `covered_elsewhere` and
+`wrong_page_ranked` are coverage, so they become **already_covered** naming the
+pages the corpus ranked. `packaging` and `docs_only` become **not_a_gap**. Every
+other cause becomes **unverified**, naming the check that failed. The mapping is
+an exhaustive switch in
+[`src/analysis/evidence.ts`](./src/analysis/evidence.ts), so a new cause does
+not compile until it has a verdict.
 
 Impact never moves for grounding. Impact is about what the competitor shipped.
 
@@ -317,11 +330,27 @@ signal gets an embed.
 No new action types, and no "document this": the docs are evidence, and asking
 for them to be written is not work this bot files.
 
-**Zero actions** is an answer, carried as one sentence in `no_action_reason`.
-It happens three ways, and all three are correct: the launch asks nothing of
-Railway because Railway already does it, the launch is minor enough that
-nothing follows from it, or everything recommended failed the evidence gate and
-became an open question instead.
+**Zero actions** is an answer, carried as a `no_action` verdict: a kind, one
+sentence, and the corpus pages under it. The five kinds and where each is
+written:
+
+| Kind | Title | Written by |
+| --- | --- | --- |
+| `already_covered` | None – Railway already does this | The gate, off a coverage cause, or the analyst with docs pages it quoted |
+| `not_a_gap` | None – not a product gap | The gate on a pricing or docs-only block, and the relevance guards |
+| `unverified` | None – the gap could not be confirmed | Any other failed check, and a stored row that carries only a sentence |
+| `dropped_on_review` | None – dropped on review | The review pass, in the reviewer's own words |
+| `unanalyzed` | None – not analyzed this run | The heuristic, when `CURSOR_API_KEY` is unset |
+
+`already_covered` is the only kind that has to carry pages. It is a claim about
+what Railway ships, so it goes through the checks a gap claim does – in the
+corpus, product documentation, quote on the stored copy – and a verdict left
+with no evidence is downgraded to `unverified` naming the page that could not
+be confirmed. Nothing is invented to fill the space.
+
+The same sentence is written to `noActionReason` alongside the verdict, so a
+row stored before the verdict had a shape still reads: it renders as
+`unverified` with no pages, which is what it always was.
 
 `update_pages` targets only Railway's own pages:
 `platform/compare-to-render`, `platform/compare-to-vercel`,
@@ -437,7 +466,7 @@ returns one verdict on that action:
 | --- | --- | --- |
 | `agree` | Comment naming the pages it read, `review:agreed` | Unchanged |
 | `revise` | Title, body, and labels rewritten, with a before/after comment, `review:revised` | Carries the corrected action |
-| `drop` | Closed as not planned, `review:dropped` | The action is absent, and an alert that loses all of them shows **None** with the reason |
+| `drop` | Closed as not planned, `review:dropped`, with the verdict as a comment and as an `## Outcome` section above the body | The action is absent, and an alert that loses all of them shows **None – dropped on review** in the reviewer's own words, with the pages it read |
 
 A `revise` is applied by the analyst's model in one text-only run: no corpus, no
 tools, and only the pages the reviewer read in its prompt. What comes back is

@@ -183,7 +183,12 @@ async function prepareAlert(
 
   const targets: ReviewTarget[] = [];
   for (const { action, draft } of buildIssueDrafts(analyzed, image, visuals)) {
-    targets.push({ action, issue: await issues.create(draft), labels: draft.labels });
+    targets.push({
+      action,
+      issue: await issues.create(draft),
+      labels: draft.labels,
+      body: draft.body,
+    });
   }
 
   const reviewed = await reviewActions({
