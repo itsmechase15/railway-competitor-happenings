@@ -26,6 +26,12 @@ and not the half of it that needs no credentials. `SKIP_RAILWAY_INDEX=true`
 skips the corpus rebuild when you only care about the embed, at the cost of
 every gap claim being dropped for want of anything to check it against.
 
+A dry run still draws the Before/After picture for a page edit, to a temp
+directory, and logs the path, because that is the part worth looking at and it
+needs no credentials. It commits nothing. `SKIP_PAGE_VISUALS=true` skips the
+drawing, which is what you want on a box with no Chromium: run
+`npx playwright install chromium` once if you would rather see it.
+
 ## House rules for changes
 
 - **Evidence is checked, never trusted.** A product action names its gap, cites
@@ -57,6 +63,14 @@ every gap claim being dropped for want of anything to check it against.
   [Review section of PLAN.md](./PLAN.md#review-every-action-once).
 - **Zero actions is a normal answer**, rendered as **None** with a reason. Do
  not reintroduce a rule that an alert has to recommend something.
+- **The Before/After is drawn from the corpus, never from the live page.** An
+ `update_pages` issue embeds a PNG of the paragraph with the edit in it, rendered
+ by [`src/media/page-edit.ts`](./src/media/page-edit.ts) from the stored corpus
+ copy. Loading railway.com and editing its DOM would picture a page nobody
+ reviewed and put a browser on Railway's site every morning. Page actions only:
+ there is no before and after of a feature that does not exist. And every step of
+ it fails soft – no browser, no token, a refused commit – because an issue
+ without the picture says the same thing in words.
 - **A team is read off the about page, never invented.** Every entry in
  [`src/railway/teams.ts`](./src/railway/teams.ts) is the group of employee titles
  [railway.com/about](https://railway.com/about) lists, which is why there is no

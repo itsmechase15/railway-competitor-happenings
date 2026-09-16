@@ -32,7 +32,9 @@ a compare, migrate, pricing, or features page is now wrong, it reads that page,
 quotes the line as it stands, and writes the replacement out in full, in that
 page's own voice, so the issue is a copy and a paste rather than a writing
 assignment. "Mention the new thing here" is not an edit, and an action that
-proposes one is dropped like any other unevidenced claim.
+proposes one is dropped like any other unevidenced claim. The issue also shows
+the paragraph twice, side by side, with the words that changed marked. See
+[Before and after on a page edit](#before-and-after-on-a-page-edit).
 
 Then every action that made it into an issue is reviewed once, by a second
 model over the same corpus, before the embed goes out. See
@@ -71,6 +73,42 @@ not do. It is a **different model**, shown the **analyst's claim** rather than
 its own, with the **corpus underneath it**, whose rewrite is **re-checked by
 code** rather than by another model, **once**. Take away any one of those and it
 becomes the pass [AGENTS.md](./AGENTS.md) rules out.
+
+## Before and after on a page edit
+
+An `update_pages` issue carries the page, the line on it today, and the copy to
+paste. The first question the person making the edit has is what the paragraph
+looks like with that copy in it, and no amount of text answers it, so the issue
+shows a picture: the paragraph twice, side by side, with the removed words struck
+through in red and the new ones in green.
+
+It is drawn from the **stored corpus copy of the page, never the live page**.
+That is the same text the analyst read and the same text the evidence gate
+checked the quote against, so the Before panel is the copy somebody reviewed
+rather than whatever railway.com serves this morning. Loading the real page and
+editing its DOM would produce a picture of a page nobody reviewed, and would put
+this bot's browser on Railway's own site every morning.
+
+Only page actions get one. `consider_enhancing` and `consider_building` are
+asking for a feature, and there is no before and after of a feature that does not
+exist yet.
+
+GitHub renders an image it can fetch, so the PNG is committed to
+[`artifacts/update-pages/`](./artifacts/update-pages/) through the contents API
+before the issue is opened, and the issue body embeds the raw URL. That is the
+only thing in the app that writes to the repo, and the reason `daily.yml` and
+`force-post.yml` grant `contents: write`. Each file is named for the page and a
+hash of both sides of the edit, so re-running a recommendation reuses the file
+and a rewritten edit gets a new one rather than changing the picture an open
+issue points at.
+
+Everything about it fails soft. No Chromium, no token, a dry run, a refused
+commit, a page edit with no proposed copy: each costs the picture and none of them
+costs the issue, which says the same thing in words. A dry run draws it anyway,
+to a temp directory, and logs where. `SKIP_PAGE_VISUALS=true` turns it off.
+
+A revise redraws. Changing the copy is the reviewer's whole job, and a picture of
+copy nobody is proposing any more is worse than no picture.
 
 ## Who each issue is for
 
@@ -304,6 +342,10 @@ off when you are iterating on something else.
 | `src/railway/pages.ts` | What a page action may target |
 | `src/railway/teams.ts` | Railway's teams, read off the titles on the about page, and what each one builds |
 | `src/teams.ts` | Which of them an action is for: the model's answer, then who owns the surface, then a default |
+| `src/media/diff.ts` | The word-level diff a Before/After is drawn from |
+| `src/media/page-edit.ts` | Finds the paragraph, plans the two panels, renders the HTML. No browser, no network |
+| `src/media/visual.ts` | The headless-browser screenshot, and every path that gives up on it quietly |
+| `src/github/artifact.ts` | Commits the PNG so an issue can render it inline |
 | `src/analysis/analyst.ts` | One analyst run, read-only, with the files it opened recorded |
 | `src/analysis/evidence.ts` | The gate: citations, quotes, the coverage check, page edits |
 | `src/analysis/` | The prompt, the reply schema, the docs-grounding guards, and the no-key fallback |

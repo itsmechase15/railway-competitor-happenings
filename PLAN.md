@@ -358,6 +358,32 @@ Labels: `competitor-happenings`, `render|vercel`, `source:<label>`,
 `team:<slug>` from the routing below, and one `review:<verdict>` from the pass
 after it.
 
+## Show the page edit as a picture
+
+An `update_pages` issue carries the page, the line on it today, and the copy to
+paste. What text cannot do is show the paragraph with that copy in it, so the
+issue embeds a PNG of the paragraph twice, side by side, with removed words
+struck through and new ones highlighted.
+
+Drawn from the stored corpus copy of the page and never from the live page. The
+Before panel is the text the analyst read and the evidence gate checked the quote
+against, which is the copy somebody reviewed; the live page is neither, and
+pointing a browser at railway.com every morning to edit its DOM buys nothing.
+
+GitHub renders an image it can fetch, so the PNG is committed to
+`artifacts/update-pages/` through the contents API before the issue is opened.
+That is the only write this app makes to the repo, and it is why the two pipeline
+workflows grant `contents: write`. The file name is a hash of the page and both
+sides of the edit: a re-run reuses it, a rewrite gets a new one.
+
+Page actions only. There is no before and after of a feature that does not exist,
+so `consider_enhancing` and `consider_building` never get one.
+
+Every step gives up quietly. No browser, no token, a dry run, a refused commit:
+the issue is filed in text, saying the same thing in words. A dry run still draws
+it to a temp directory and logs the path. `SKIP_PAGE_VISUALS=true` turns it off.
+A revise redraws, because the copy is what a revise changes.
+
 ## Route it to a team, not to a department
 
 `owner:product` names nobody. Railway publishes no team pages, but the about
