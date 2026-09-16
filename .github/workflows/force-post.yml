@@ -34,7 +34,9 @@ permissions:
 jobs:
   post:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # One item, but the analyst still builds and searches the docs corpus, and
+    # every action it files is reviewed against the same corpus afterwards.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
@@ -109,6 +111,11 @@ jobs:
           # just leaves no dedupe trace behind.
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          # Force-post shares prepareAlert with the daily run, so it reviews what
+          # it files the same way. Unset falls back to the defaults in config.ts.
+          REVIEW_MODEL: ${{ vars.REVIEW_MODEL }}
+          UPDATER_MODEL: ${{ vars.UPDATER_MODEL }}
+          REVIEW_MAX_PER_RUN: ${{ vars.REVIEW_MAX_PER_RUN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           DISCORD_CHANNEL_ID: ${{ vars.DISCORD_CHANNEL_ID || secrets.DISCORD_CHANNEL_ID }}

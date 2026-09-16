@@ -101,8 +101,11 @@ async function main(): Promise<void> {
   const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
 
   const retried = summary.retried > 0 ? `, ${summary.retried} retried` : "";
+  // Only mentioned when it happened: on most days the reviewer closes nothing,
+  // and a "0 closed on review" on every line teaches people to skip the line.
+  const closed = summary.issuesClosed > 0 ? ` (${summary.issuesClosed} closed on review)` : "";
   log.info(
-    `done in ${seconds}s – ${summary.candidates} candidates, ${summary.newItems} new (${summary.seeded} seeded), ${summary.analyzed} analyzed${retried}, ${summary.issuesOpened} issues opened, ${summary.posted} posted`,
+    `done in ${seconds}s – ${summary.candidates} candidates, ${summary.newItems} new (${summary.seeded} seeded), ${summary.analyzed} analyzed${retried}, ${summary.issuesOpened} issues opened${closed}, ${summary.posted} posted`,
   );
   for (const note of summary.notes) log.info(`note: ${note}`);
 }

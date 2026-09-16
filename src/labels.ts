@@ -78,6 +78,34 @@ export function actionLabel(action: RecommendedAction): string {
 }
 
 /**
+ * What the review left behind, as a label anyone can filter on.
+ *
+ * `agreed`, `revised`, and `dropped` are the three verdicts. `unconfirmed` is a
+ * revise that was written and then could not survive the evidence checks, so
+ * the issue still says what the analyst wrote – the label is there because
+ * "reviewed and left alone" and "reviewed, rewritten, and the rewrite failed"
+ * are different things to a reader. `skipped` is no review at all: the run was
+ * over its budget, or the reviewer model refused the run.
+ */
+export const REVIEW_LABEL = {
+  agreed: "review:agreed",
+  revised: "review:revised",
+  dropped: "review:dropped",
+  unconfirmed: "review:unconfirmed",
+  skipped: "review:skipped",
+} as const;
+
+/**
+ * The label that makes the loop run once.
+ *
+ * Every verdict writes it, in the same request that writes the verdict's own
+ * label, and the review entry point refuses any issue that already carries it.
+ * An edit never calls the reviewer, so there is no path back in – this is the
+ * belt to that braces.
+ */
+export const REVIEW_PASS_DONE = "review-pass:done";
+
+/**
  * The short tag for where an item came from, used everywhere the source is
  * named as a tag rather than in a sentence: the link on the KNOW line, the
  * embed footer, and the issue. It names the thing you land on, so a page on

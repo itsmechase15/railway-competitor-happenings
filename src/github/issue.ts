@@ -30,6 +30,22 @@ export interface IssueDraft {
   labels: string[];
 }
 
+/**
+ * What a review verdict changes on an issue that already exists.
+ *
+ * `labels` replaces the whole set rather than adding to it, which is what
+ * GitHub's PATCH does. That is why the labels an issue was opened with are
+ * carried alongside it: a verdict adds its own label to that list and sends
+ * the result, so one request records the whole outcome.
+ */
+export interface IssuePatch {
+  title?: string;
+  body?: string;
+  labels?: string[];
+  state?: "open" | "closed";
+  stateReason?: "completed" | "not_planned" | "reopened";
+}
+
 /** One action's issue, kept next to the action so the caller can pair them up. */
 export interface ActionIssueDraft {
   action: RecommendedAction;
@@ -312,6 +328,43 @@ export interface IssueCreator {
   create(draft: IssueDraft): Promise<IssueRef | null>;
 }
 
+interface GitHubRequest {
+  method: "POST" | "PATCH";
+  path: string;
+  token: string;
+  timeoutMs: number;
+  payload: Record<string, unknown>;
+}
+
+/** One call to the issues API. Throws with the status in the message, which is what the label retry reads. */
+async function githubRequest(request: GitHubRequest): Promise<IssueResponse> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), request.timeoutMs);
+  try {
+    const response = await fetch(`${GITHUB_API_BASE}${request.path}`, {
+      method: request.method,
+      headers: {
+        accept: "application/vnd.github+json",
+        authorization: `Bearer ${request.token}`,
+        "content-type": "application/json",
+        "x-github-api-version": "2022-11-28",
+      },
+      body: JSON.stringify(request.payload),
+      signal: controller.signal,
+    });
+
+    const body = (await response.json().catch(() => ({}))) as IssueResponse;
+    if (!response.ok) {
+      throw new Error(
+        `${request.method} ${request.path} returned ${response.status}: ${body.message ?? "no detail"}`,
+      );
+    }
+    return body;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export class GitHubIssueCreator implements IssueCreator {
   readonly description: string;
 
@@ -324,29 +377,13 @@ export class GitHubIssueCreator implements IssueCreator {
   }
 
   private async post(draft: IssueDraft, labels: string[]): Promise<IssueResponse> {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-    try {
-      const response = await fetch(`${GITHUB_API_BASE}/repos/${this.repo}/issues`, {
-        method: "POST",
-        headers: {
-          accept: "application/vnd.github+json",
-          authorization: `Bearer ${this.token}`,
-          "content-type": "application/json",
-          "x-github-api-version": "2022-11-28",
-        },
-        body: JSON.stringify({ title: draft.title, body: draft.body, labels }),
-        signal: controller.signal,
-      });
-
-      const body = (await response.json().catch(() => ({}))) as IssueResponse;
-      if (!response.ok) {
-        throw new Error(`POST /issues returned ${response.status}: ${body.message ?? "no detail"}`);
-      }
-      return body;
-    } finally {
-      clearTimeout(timer);
-    }
+    return githubRequest({
+      method: "POST",
+      path: `/repos/${this.repo}/issues`,
+      token: this.token,
+      timeoutMs: this.timeoutMs,
+      payload: { title: draft.title, body: draft.body, labels },
+    });
   }
 
   async create(draft: IssueDraft): Promise<IssueRef | null> {
@@ -395,4 +432,169 @@ export function createIssueCreator(config: Config): IssueCreator {
   if (config.dryRun) return new DisabledIssueCreator("dry run");
   if (!config.githubToken) return new DisabledIssueCreator("GITHUB_TOKEN is not set");
   return new GitHubIssueCreator(config.githubRepo, config.githubToken, config.httpTimeoutMs);
+}
+
+/**
+ * Changing an issue that already exists, which is what a review verdict does.
+ *
+ * Every method takes an issue that may be null, because the pipeline reviews an
+ * action whether or not an issue was opened for it: a dry run and a run with no
+ * token both review and both have nothing to write to. That is deliberate – the
+ * disabled editor says what it would have done, so a dry run shows the whole
+ * verdict rather than the half of it that needs no credentials.
+ *
+ * Nothing here fails a run. An issue that cannot be edited is an issue that
+ * still says what the analyst wrote, which is worse than the reviewed version
+ * and better than a run that stopped.
+ */
+export interface IssueEditor {
+  readonly description: string;
+  /** Returns whether the edit landed. */
+  update(issue: IssueRef | null, patch: IssuePatch): Promise<boolean>;
+  comment(issue: IssueRef | null, body: string): Promise<boolean>;
+  /**
+   * Close it, with the labels the verdict leaves behind. One request, so an
+   * issue is never briefly closed and unlabelled.
+   */
+  close(
+    issue: IssueRef | null,
+    reason: "completed" | "not_planned",
+    labels?: string[],
+  ): Promise<boolean>;
+}
+
+export class GitHubIssueEditor implements IssueEditor {
+  readonly description: string;
+
+  constructor(
+    private readonly repo: string,
+    private readonly token: string,
+    private readonly timeoutMs: number,
+  ) {
+    this.description = `edits issues in ${repo}`;
+  }
+
+  async update(issue: IssueRef | null, patch: IssuePatch): Promise<boolean> {
+    if (!issue) return false;
+    const payload: Record<string, unknown> = {};
+    if (patch.title !== undefined) payload.title = patch.title;
+    if (patch.body !== undefined) payload.body = patch.body;
+    if (patch.labels !== undefined) payload.labels = patch.labels;
+    if (patch.state !== undefined) payload.state = patch.state;
+    if (patch.stateReason !== undefined) payload.state_reason = patch.stateReason;
+
+    // A label the repo has never seen is a 422, same as on create, and the rest
+    // of the edit matters more than the label that came with it.
+    const withoutLabels =
+      payload.labels !== undefined && Object.keys(payload).length > 1
+        ? Object.fromEntries(Object.entries(payload).filter(([key]) => key !== "labels"))
+        : undefined;
+
+    return this.send(
+      `/repos/${this.repo}/issues/${issue.number}`,
+      "PATCH",
+      payload,
+      issue,
+      withoutLabels,
+    );
+  }
+
+  async comment(issue: IssueRef | null, body: string): Promise<boolean> {
+    if (!issue) return false;
+    return this.send(`/repos/${this.repo}/issues/${issue.number}/comments`, "POST", { body }, issue);
+  }
+
+  async close(
+    issue: IssueRef | null,
+    reason: "completed" | "not_planned",
+    labels?: string[],
+  ): Promise<boolean> {
+    return this.update(issue, {
+      state: "closed",
+      stateReason: reason,
+      ...(labels ? { labels } : {}),
+    });
+  }
+
+  private async send(
+    path: string,
+    method: "POST" | "PATCH",
+    payload: Record<string, unknown>,
+    issue: IssueRef,
+    withoutLabels?: Record<string, unknown>,
+  ): Promise<boolean> {
+    try {
+      try {
+        await githubRequest({ method, path, token: this.token, timeoutMs: this.timeoutMs, payload });
+      } catch (error) {
+        const rejectedLabel =
+          withoutLabels !== undefined && error instanceof Error && error.message.includes("422");
+        if (!rejectedLabel) throw error;
+        log.warn(`retrying without labels: ${(error as Error).message}`);
+        await githubRequest({
+          method,
+          path,
+          token: this.token,
+          timeoutMs: this.timeoutMs,
+          payload: withoutLabels,
+        });
+      }
+      return true;
+    } catch (error) {
+      log.error(`could not edit ${issue.url}`, error instanceof Error ? error.message : error);
+      return false;
+    }
+  }
+}
+
+/** Used when there is no token, or when a dry run must not write anything. */
+export class DisabledIssueEditor implements IssueEditor {
+  readonly description: string;
+
+  constructor(readonly reason: string) {
+    this.description = `skipped (${reason})`;
+  }
+
+  async update(issue: IssueRef | null, patch: IssuePatch): Promise<boolean> {
+    const changed = [
+      patch.title ? "title" : null,
+      patch.body ? "body" : null,
+      patch.labels ? `labels ${patch.labels.join(", ")}` : null,
+      patch.state ? `state ${patch.state}` : null,
+      patch.stateReason ? `reason ${patch.stateReason}` : null,
+    ].filter(Boolean);
+    log.info(`[${this.reason}] would edit ${describeIssue(issue)}: ${changed.join(" · ")}`);
+    return false;
+  }
+
+  async comment(issue: IssueRef | null, body: string): Promise<boolean> {
+    log.info(`[${this.reason}] would comment on ${describeIssue(issue)}: ${firstLine(body)}`);
+    return false;
+  }
+
+  async close(
+    issue: IssueRef | null,
+    reason: "completed" | "not_planned",
+    labels?: string[],
+  ): Promise<boolean> {
+    return this.update(issue, {
+      state: "closed",
+      stateReason: reason,
+      ...(labels ? { labels } : {}),
+    });
+  }
+}
+
+function describeIssue(issue: IssueRef | null): string {
+  return issue ? `#${issue.number}` : "the issue it never opened";
+}
+
+function firstLine(body: string): string {
+  return truncate(body.split("\n").find((line) => line.trim() !== "") ?? "", 160);
+}
+
+export function createIssueEditor(config: Config): IssueEditor {
+  if (config.dryRun) return new DisabledIssueEditor("dry run");
+  if (!config.githubToken) return new DisabledIssueEditor("GITHUB_TOKEN is not set");
+  return new GitHubIssueEditor(config.githubRepo, config.githubToken, config.httpTimeoutMs);
 }

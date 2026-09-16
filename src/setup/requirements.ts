@@ -115,6 +115,39 @@ export const REQUIREMENTS: Requirement[] = [
     howToGet: "Defaults to claude-opus-5",
   },
   {
+    name: "REVIEW_MODEL",
+    need: "optional",
+    home: "actions-variable",
+    purpose:
+      "Model that reviews every filed action against the docs corpus and returns agree, revise, or drop",
+    howToGet: "Defaults to claude-fable-5-1. It has to be a model your CURSOR_API_KEY can run",
+    without:
+      "a model id the Cursor SDK turns down skips the review, labels the issue review:skipped, and files the action as the analyst wrote it",
+  },
+  {
+    name: "UPDATER_MODEL",
+    need: "optional",
+    home: "actions-variable",
+    purpose: "Model that rewrites an action the reviewer asked to revise",
+    howToGet: "Defaults to CURSOR_MODEL, which is the analyst's model",
+  },
+  {
+    name: "SKIP_REVIEW",
+    need: "optional",
+    home: "local",
+    purpose: "Turn the review pass off, for a fast local run",
+    howToGet: "Set it to true on a laptop. The daily job leaves it unset",
+    without: "nothing – unset is the daily job's behaviour, which is to review",
+  },
+  {
+    name: "REVIEW_MAX_PER_RUN",
+    need: "optional",
+    home: "actions-variable",
+    purpose: "Reviews allowed in one run, which is what caps the review's cost",
+    howToGet: "Defaults to 12, the same cap as MAX_ITEMS_PER_RUN",
+    without: "actions past the cap are filed as written and labelled review:skipped",
+  },
+  {
     name: "DOCS_LLMS_FULL_TXT",
     need: "optional",
     home: "actions-variable",

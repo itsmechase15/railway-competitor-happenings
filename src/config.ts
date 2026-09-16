@@ -87,6 +87,17 @@ export const DEFAULT_GITHUB_REPO = "itsmechase15/railway-competitor-happenings";
  */
 export const DEFAULT_DOCS_SITEMAPS = ["https://docs.railway.com/sitemap.xml"];
 
+/**
+ * The reviewer's model.
+ *
+ * Not the analyst's. The review exists to catch a claim the analyst was
+ * confident about and wrong about, and the model that wrote such a claim is the
+ * worst judge of it. A model id the Cursor SDK turns down costs the run
+ * nothing: the review is skipped, the label says so, and the issue stands as
+ * the analyst filed it.
+ */
+export const DEFAULT_REVIEW_MODEL = "claude-fable-5-1";
+
 export const DEFAULT_SCREENSHOT_URL_TEMPLATES = [
   "https://api.microlink.io/?url={encodedUrl}&screenshot=true&meta=false&embed=screenshot.url",
   "https://image.thum.io/get/width/1200/crop/900/noanimate/{url}",
@@ -115,6 +126,25 @@ export interface Config {
   cursorModel: string;
   /** "local" runs the agent on this machine; "cloud" uses a no-repo cloud agent. */
   cursorRuntime: "local" | "cloud";
+  /**
+   * The model that reviews each filed action against the same docs corpus. A
+   * different model from the analyst on purpose: a second opinion from the
+   * model that wrote the claim is not a second opinion.
+   */
+  reviewModel: string;
+  /**
+   * The model that rewrites an action the reviewer asked to revise. Defaults to
+   * the analyst's model, because writing Railway copy is the analyst's job and
+   * the reviewer's job is deciding whether the copy is true.
+   */
+  updaterModel: string;
+  /** Skip the review pass entirely. For a fast local run, not for the daily job. */
+  skipReview: boolean;
+  /**
+   * Reviews allowed in one run. Past it, an action keeps the issue it was filed
+   * with and picks up a `review:skipped` label saying nobody looked.
+   */
+  reviewMaxPerRun: number;
   xBearerToken: string | undefined;
   /** Items published before this many days ago are ignored. */
   lookbackDays: number;
@@ -220,6 +250,10 @@ export function loadConfig(): Config {
     cursorApiKey: str("CURSOR_API_KEY"),
     cursorModel: str("CURSOR_MODEL") ?? "claude-opus-5",
     cursorRuntime: runtime,
+    reviewModel: str("REVIEW_MODEL") ?? DEFAULT_REVIEW_MODEL,
+    updaterModel: str("UPDATER_MODEL") ?? str("CURSOR_MODEL") ?? "claude-opus-5",
+    skipReview: bool("SKIP_REVIEW", false),
+    reviewMaxPerRun: int("REVIEW_MAX_PER_RUN", 12),
     xBearerToken: str("X_BEARER_TOKEN"),
     lookbackDays: int("LOOKBACK_DAYS", 7),
     maxItemsPerRun: int("MAX_ITEMS_PER_RUN", 12),
