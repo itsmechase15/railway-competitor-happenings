@@ -21,9 +21,10 @@ jobs:
         run: |
           set -euo pipefail
           python3 <<'PY'
-          import json, os, re, urllib.request
+          import json, os, re, urllib.request, urllib.error
           token = os.environ["DISCORD_BOT_TOKEN"]
           channel = os.environ["DISCORD_CHANNEL_ID"]
+          print("channel", channel)
           patterns = [re.compile(x, re.I) for x in [r"issues/10\b", r"cdn metadata", r"flat.?rate.?cdn", r"91%", r"Consider enhancing CDN", r"introducing-flat-rate-cdn", r"how-we-cut-cdn-metadata"]]
           req = urllib.request.Request(f"https://discord.com/api/v10/channels/{channel}/messages?limit=50", headers={"Authorization": f"Bot {token}", "User-Agent": "otto-cleanup"})
           with urllib.request.urlopen(req) as resp: messages = json.load(resp)
@@ -32,22 +33,38 @@ jobs:
               if any(p.search(json.dumps(m)) for p in patterns):
                   mid = m["id"]
                   dreq = urllib.request.Request(f"https://discord.com/api/v10/channels/{channel}/messages/{mid}", method="DELETE", headers={"Authorization": f"Bot {token}", "User-Agent": "otto-cleanup"})
-                  with urllib.request.urlopen(dreq) as dresp:
-                      print(f"deleted Discord message {mid} status={dresp.status}")
-                      deleted.append(mid)
+                  try:
+                      with urllib.request.urlopen(dreq) as dresp:
+                          print(f"deleted Discord message {mid} status={dresp.status}")
+                          deleted.append(mid)
+                  except urllib.error.HTTPError as e:
+                      print(f"FAILED Discord {mid}: {e.read().decode()}")
           print(f"Discord deleted_count={len(deleted)} ids={deleted}")
           PY
 
-      - name: GraphQL deleteIssue #10
+      - name: GraphQL deleteIssue #10 (continue on failure)
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           NODE_ID=$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" https://api.github.com/repos/itsmechase15/railway-competitor-happenings/issues/10 | python3 -c 'import sys,json; print(json.load(sys.stdin).get("node_id",""))')
-          if [ -z "$NODE_ID" ]; then echo "Issue #10 already gone"; exit 0; fi
+          echo "node_id=$NODE_ID"
+          if [ -z "$NODE_ID" ]; then echo "already gone"; exit 0; fi
           RESP=$(curl -sS -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" https://api.github.com/graphql -d "{\"query\":\"mutation($id:ID!){deleteIssue(input:{issueId:$id}){clientMutationId}}\",\"variables\":{\"id\":\"$NODE_ID\"}}")
           echo "$RESP"
-          echo "$RESP" | python3 -c 'import sys,json; d=json.load(sys.stdin); assert d.get("data",{}).get("deleteIssue") is not None, d; print("DELETE_OK")'
+          echo "$RESP" | python3 -c 'import sys,json; d=json.load(sys.stdin); assert d.get("data",{}).get("deleteIssue") is not None, d'
+
+      - name: Close issue #10 if still present
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CODE=$(curl -sS -o /tmp/iss.json -w "%{http_code}" -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" https://api.github.com/repos/itsmechase15/railway-competitor-happenings/issues/10 || true)
+          echo "http=$CODE"
+          if [ "$CODE" = "404" ]; then echo "deleted"; exit 0; fi
+          curl -sS -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" https://api.github.com/repos/itsmechase15/railway-competitor-happenings/issues/10 -d '{"state":"closed","state_reason":"not_planned"}'
+          echo
 
       - uses: actions/checkout@v4
       - name: Remove this cleanup workflow from main
@@ -59,5 +76,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           rm -f .github/workflows/otto-cleanup.yml
           git add -A
+          if git diff --cached --quiet; then echo already gone; exit 0; fi
           git commit -m "chore: remove one-shot otto cleanup workflow"
           git push
