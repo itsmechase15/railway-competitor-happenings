@@ -81,8 +81,8 @@ jobs:
       - run: npm run build
         if: steps.target.outputs.proceed == 'true'
 
-      # Same as the daily run: it draws the Before/After on an update_pages
-      # issue, and a run without it files the issue in text instead.
+      # Same as the daily run: it photographs the page an update_pages issue is
+      # about, and a run without it files the issue in text instead.
       - name: Install Chromium for the before/after images
         if: steps.target.outputs.proceed == 'true'
         run: npx playwright install --with-deps chromium

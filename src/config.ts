@@ -141,10 +141,10 @@ export interface Config {
   /** Skip the review pass entirely. For a fast local run, not for the daily job. */
   skipReview: boolean;
   /**
-   * Stop drawing the Before/After image on an `update_pages` issue. It is the
-   * one thing in the app that runs a browser and commits to the repo, so it has
-   * a switch of its own – an issue without the picture says the same thing in
-   * words.
+   * Stop photographing the page for the Before/After on an `update_pages`
+   * issue. It is the one thing in the app that runs a browser and commits to
+   * the repo, so it has a switch of its own – an issue without the pictures
+   * says the same thing in words.
    */
   skipPageVisuals: boolean;
   /**

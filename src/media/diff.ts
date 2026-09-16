@@ -91,18 +91,14 @@ function commonSubsequence(before: string[], after: string[]): DiffSpan[] {
   return spans;
 }
 
-/** Consecutive words of the same kind are one span, so the drawing has one box per run. */
+/** Consecutive words of the same kind are one span, so a run is counted once. */
 function push(spans: DiffSpan[], kind: DiffKind, text: string): void {
   const last = spans[spans.length - 1];
   if (last?.kind === kind) last.text += text;
   else spans.push({ kind, text });
 }
 
-/**
- * The two texts as one list of spans, in reading order. A caller draws the
- * Before panel from everything that is not `added` and the After panel from
- * everything that is not `removed`.
- */
+/** The two texts as one list of spans, in reading order. */
 export function diffWords(before: string, after: string): DiffSpan[] {
   const from = words(before);
   const to = words(after);

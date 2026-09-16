@@ -26,10 +26,12 @@ and not the half of it that needs no credentials. `SKIP_RAILWAY_INDEX=true`
 skips the corpus rebuild when you only care about the embed, at the cost of
 every gap claim being dropped for want of anything to check it against.
 
-A dry run still draws the Before/After picture for a page edit, to a temp
-directory, and logs the path, because that is the part worth looking at and it
-needs no credentials. It commits nothing. `SKIP_PAGE_VISUALS=true` skips the
-drawing, which is what you want on a box with no Chromium: run
+A dry run still photographs the page for a page edit, writes both PNGs to a
+temp directory, and logs the paths, because that is the part worth looking at
+and it needs no credentials. It commits nothing, and it publishes nothing to
+Railway: the proposed copy goes into the headless browser's own copy of the
+document and dies with the tab. `SKIP_PAGE_VISUALS=true` skips the whole thing,
+which is what you want on a box with no Chromium: run
 `npx playwright install chromium` once if you would rather see it.
 
 ## House rules for changes
@@ -63,14 +65,21 @@ drawing, which is what you want on a box with no Chromium: run
   [Review section of PLAN.md](./PLAN.md#review-every-action-once).
 - **Zero actions is a normal answer**, rendered as **None** with a reason. Do
  not reintroduce a rule that an alert has to recommend something.
-- **The Before/After is drawn from the corpus, never from the live page.** An
- `update_pages` issue embeds a PNG of the paragraph with the edit in it, rendered
- by [`src/media/page-edit.ts`](./src/media/page-edit.ts) from the stored corpus
- copy. Loading railway.com and editing its DOM would picture a page nobody
- reviewed and put a browser on Railway's site every morning. Page actions only:
- there is no before and after of a feature that does not exist. And every step of
- it fails soft – no browser, no token, a refused commit – because an issue
- without the picture says the same thing in words.
+- **The Before/After is two screenshots of the live page, and publishes
+ nothing.** An `update_pages` issue embeds a PNG of the page as it reads today
+ and a PNG of the same page with the proposed copy in it, taken by
+ [`src/media/live-page.ts`](./src/media/live-page.ts): open the page in a
+ headless browser, shoot it, put the copy into that tab's own DOM, shoot it
+ again, throw the tab away. Nothing is submitted anywhere and the After's
+ caption says so. This replaced a card drawn from the corpus text, which read as
+ a text mock of a page rather than the page – do not bring it back, as a
+ fallback or otherwise (Chase asked for the real UI, in so many words). The
+ corpus is still what the claim is *checked* against, and a claim the live page
+ no longer has is a dropped picture and a line in the issue saying the page has
+ moved on, never a guess at where it went. Page actions only: there is no before
+ and after of a feature that does not exist. Every step fails soft – no browser,
+ a page that will not load, no token, a refused commit – because an issue
+ without the pictures says the same thing in words.
 - **A team is read off the about page, never invented.** Every entry in
  [`src/railway/teams.ts`](./src/railway/teams.ts) is the group of employee titles
  [railway.com/about](https://railway.com/about) lists, which is why there is no
