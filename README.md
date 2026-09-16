@@ -103,7 +103,9 @@ paste. The first question the person making the edit has is what the page looks
 like with that copy on it, and no amount of text answers it. So the issue shows
 two screenshots of the page, stacked: **Before**, the page as it reads today,
 and **After**, the same page with the proposed copy in it, sidebar, heading,
-type and all.
+type and all. On the After, and on the After only, the recommended copy is
+highlighted in yellow, so the reader sees which words are the recommendation
+without reading one shot against the other to find them.
 
 They are taken off the **live page**. A headless browser opens it, photographs
 the window, puts the copy into that tab's own document, and photographs the

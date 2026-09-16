@@ -84,8 +84,10 @@ which is what you want on a box with no Chromium: run
  [`src/media/live-page.ts`](./src/media/live-page.ts): open the page in a
  headless browser, shoot it, put the copy into that tab's own DOM, shoot it
  again, throw the tab away. Nothing is submitted anywhere and the After's
- caption says so. This replaced a card drawn from the corpus text, which read as
- a text mock of a page rather than the page – do not bring it back, as a
+ caption says so. The copy that went in is highlighted on the After and only
+ there, so a reader spots the edit in a thumbnail; the Before is never marked,
+ and nothing the page already said is either. This replaced a card drawn from
+ the corpus text, which read as a text mock of a page rather than the page – do not bring it back, as a
  fallback or otherwise (Chase asked for the real UI, in so many words). The
  corpus is still what the claim is *checked* against, and a claim the live page
  no longer has is a dropped picture and a line in the issue saying the page has
