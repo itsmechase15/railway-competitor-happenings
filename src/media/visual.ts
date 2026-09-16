@@ -1,6 +1,6 @@
 import { chromium } from "playwright";
 import type { Config } from "../config.js";
-import { createArtifactWriter, type ArtifactWriter } from "../github/artifact.js";
+import { carriesCredential, createArtifactWriter, type ArtifactWriter } from "../github/artifact.js";
 import { createLogger } from "../log.js";
 import { isMarketingTarget } from "../railway/pages.js";
 import type { CorpusIndex } from "../railway/retrieval.js";
@@ -135,6 +135,14 @@ export class BrowserPageVisualMaker implements PageVisualMaker {
         if (!png) continue;
         const imageUrl = await this.artifacts.write(plan.path, png, commitMessage(alert, plan));
         if (!imageUrl) continue;
+        // The last gate before a URL reaches an issue body. A signed URL renders
+        // while its signature lasts and 404s for everyone who reads the issue
+        // afterwards, which is a broken image where the explanation should be:
+        // worse than the text-only issue this falls back to.
+        if (carriesCredential(imageUrl)) {
+          log.warn(`refusing to embed ${plan.path}: the writer returned a URL that expires`);
+          continue;
+        }
         visuals.push({
           pageUrl: plan.pageUrl,
           imageUrl,

@@ -156,7 +156,9 @@ describe("the copy on a page issue", () => {
   it("prints the page, the copy today, and the copy to paste", () => {
     const body = pageBody();
     expect(body).toContain("## Railway pages to update");
-    expect(body).toContain("### https://docs.railway.com/platform/compare-to-render");
+    expect(body).toContain(
+      "### [Compare to render](https://docs.railway.com/platform/compare-to-render)",
+    );
     expect(body).toContain("- **Copy today:** Railway stops an idle container");
     expect(body).toContain("Replace the copy above with this, word for word:");
     expect(body).toContain("```text\n" + proposed + "\n```");

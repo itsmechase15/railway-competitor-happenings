@@ -93,10 +93,16 @@ Only page actions get one. `consider_enhancing` and `consider_building` are
 asking for a feature, and there is no before and after of a feature that does not
 exist yet.
 
-GitHub renders an image it can fetch, so the PNG is committed to
+A browser renders an image it can fetch, so the PNG is committed to
 [`artifacts/update-pages/`](./artifacts/update-pages/) through the contents API
-before the issue is opened, and the issue body embeds the raw URL. That is the
-only thing in the app that writes to the repo, and the reason `daily.yml` and
+before the issue is opened. This repo is private, so what the issue embeds is
+`github.com/<repo>/blob/<commit sha>/<path>?raw=true`: github.com is the host
+the reader is already signed in to, GitHub does not send its own URLs through
+the anonymous camo image proxy, and a commit SHA never moves. The contents API's
+own `download_url` is a `raw.githubusercontent.com` address signed with a
+short-lived token, which renders for minutes and 404s for everybody who opens
+the issue afterwards, so it never reaches an issue body. Committing is the only
+thing in the app that writes to the repo, and the reason `daily.yml` and
 `force-post.yml` grant `contents: write`. Each file is named for the page and a
 hash of both sides of the edit, so re-running a recommendation reuses the file
 and a rewritten edit gets a new one rather than changing the picture an open
