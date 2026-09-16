@@ -209,6 +209,11 @@ describe("force-post", () => {
     expect(forcePost).toContain("exit 0");
   });
 
+  it("can commit a before/after image, the same as the daily run", () => {
+    expect(forcePost).toContain("contents: write");
+    expect(forcePost).toContain("npx playwright install --with-deps chromium");
+  });
+
   it("guards every step after the URL is picked", () => {
     const steps = forcePost.split("\n").filter((line) => /^ {6}- (name|uses|run):/.test(line));
     const guards = forcePost.match(/if: steps\.target\.outputs\.proceed == 'true'/g) ?? [];
@@ -231,6 +236,17 @@ describe("the daily schedule", () => {
 
   it("can open an issue per action", () => {
     expect(daily).toContain("issues: write");
+  });
+
+  /**
+   * The Before/After picture on an `update_pages` issue is committed to the repo
+   * so GitHub can render it inline, which needs the write scope and a browser to
+   * draw with. Both are easy to drop in a tidy-up, and dropping either turns the
+   * pictures off silently: the issue still opens, in text.
+   */
+  it("can commit a before/after image, and has a browser to draw one with", () => {
+    expect(daily).toContain("contents: write");
+    expect(daily).toContain("npx playwright install --with-deps chromium");
   });
 
   it("cannot post over the force-post workflow", () => {
