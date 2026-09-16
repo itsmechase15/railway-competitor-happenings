@@ -27,6 +27,13 @@ corpus is searched again with the gap's own words, and an action is dropped
 when the docs answer it on a page the analysis never opened. Anything that
 fails becomes an open question instead of an issue.
 
+A page edit carries the same weight in a different currency. When the bot says
+a compare, migrate, pricing, or features page is now wrong, it reads that page,
+quotes the line as it stands, and writes the replacement out in full, in that
+page's own voice, so the issue is a copy and a paste rather than a writing
+assignment. "Mention the new thing here" is not an edit, and an action that
+proposes one is dropped like any other unevidenced claim.
+
 ## Sources
 
 | Competitor | Read | Not read |

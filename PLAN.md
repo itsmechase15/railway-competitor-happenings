@@ -120,9 +120,12 @@ Embed shape, in this order and nothing else:
    With no actions, one field reading **None** and one sentence saying why.
 6. **Footer** – competitor · source · model.
 
-Page citations, suggested edits, and open questions live in the issue, not the
-embed. Discord embed limits (6000 chars total, 25 fields, 1024 per field value)
-are enforced before posting.
+Page citations, the copy a page edit proposes, and open questions live in the
+issue, not the embed. A page edit's sentence names the page and one line under
+it says the exact copy is in the issue, because a paragraph of finished prose
+does not fit in a field shared with two other actions. Discord embed limits
+(6000 chars total, 25 fields, 1024 per field value) are enforced before
+posting.
 
 ## Docs grounding
 
@@ -237,6 +240,13 @@ against the same corpus afterwards.
 - A page edit has to name a page marketing owns, say what it should say
   instead, and quote copy that is still on the stored page. A page that no
   longer says the thing being corrected has already been fixed.
+- A page edit also has to carry the copy itself, in `proposed_text`: the line
+  as it should read on the page, written in that page's voice, ready to paste.
+  An edit that arrives as "mention the new thing here" is dropped, and so is
+  one whose copy is too short to be a line, reads as an instruction about the
+  page rather than as the page, or leaves a placeholder for somebody to fill
+  in. The analysis has just read the launch and the page; whoever opens the
+  issue has read neither, so the writing belongs on this side of it.
 
 A failed check is never rewritten into a weaker action. There is no way to
 correct a claim whose basis we cannot find without inventing one, so the action
@@ -318,6 +328,14 @@ became an open question instead.
 `platform/migrate-from-render`, `platform/migrate-from-vercel`, and
 `railway.com/pricing` or a features page when the launch is about them.
 
+A page edit is finished copy, not a request for copy. The analyst reads the
+target page in the workspace, quotes what it says today, and writes what it
+should say instead: full sentences in that page's own voice, matching how it
+argues (paragraph, table row, bullet), what it calls Railway and the
+competitor, and how long its sentences run. A table row is replaced with a
+table row. The bar is that a reader cannot tell which line on the page came
+from the bot.
+
 ## GitHub issues
 
 One issue per action that passed every check, in this repo, opened before the
@@ -327,7 +345,9 @@ full, the gap it closes with the docs page it was read off and the line quoted
 from it, summary, detail, the whole impact scale with this level checked, open
 questions, sources, and the image. Product issues cite the docs that back the
 action and end with the docs that would change if Railway ships it. Marketing
-issues carry url + claim today + suggested edit.
+issues carry url + copy today + what the edit does + the copy to paste, in a
+code block, labeled as a replacement for the quoted line or as an insert next
+to it.
 
 Labels: `competitor-happenings`, `render|vercel`, `source:<label>`,
 `impact:<level>`, `action:<action>`, `owner:product|marketing`.
