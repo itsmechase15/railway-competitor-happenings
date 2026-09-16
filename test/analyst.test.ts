@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { readPathFrom, READ_ONLY_TOOLS } from "../src/analysis/analyst.js";
-import { checkAnalysis, type RunContext } from "../src/analysis/analyze.js";
+import { checkAction, checkAnalysis, type RunContext } from "../src/analysis/analyze.js";
 import type { AnalyzerOutput } from "../src/analysis/analyzer.js";
 import { parseAnalysis } from "../src/analysis/schema.js";
 import { buildIssueDrafts } from "../src/github/issue.js";
-import type { RailwayDoc } from "../src/types.js";
-import { corpusIndex, storedItem } from "./helpers.js";
+import type { RailwayDoc, RecommendedAction } from "../src/types.js";
+import { analysis, corpusIndex, storedItem } from "./helpers.js";
 
 /**
  * What the analyst may do, and what we know about what it did.
@@ -269,6 +269,84 @@ describe("one reply, end to end", () => {
     );
 
     expect(analysis.pagesRead).toEqual(["https://docs.railway.com/deployments/serverless"]);
+  });
+
+  /**
+   * The review pass rewrites one action after its issue is already open, and it
+   * earns nothing for having been reviewed: the rewrite goes past the same five
+   * checks the original did, or it does not reach the issue at all.
+   */
+  describe("one action, checked again after the fact", () => {
+    const check = (action: RecommendedAction, readUrls: string[] = []) =>
+      checkAction({
+        analysis: analysis({ actions: [action], railwayRefs: [] }),
+        action,
+        refs: [],
+        impact: "notable",
+        docs: [serverlessDoc],
+        item: storedItem(),
+        coverage: { index: context().index, seenUrls: new Set(readUrls) },
+      });
+
+    it("keeps a rewrite that lands on the page the corpus ranks for its gap", () => {
+      const rewritten: RecommendedAction = {
+        type: "consider_enhancing",
+        feature: "Serverless",
+        detail: "Add per-request billing to Serverless so a sleeping service costs nothing.",
+        gap: "Railway bills a container by the minute while it is awake, with no per-request option",
+        evidenceUrl: "https://docs.railway.com/deployments/serverless",
+        evidenceQuote: "Railway bills a container by the minute while it is awake.",
+      };
+
+      const checked = check(rewritten, ["https://docs.railway.com/deployments/serverless"]);
+      expect(checked.action?.evidenceUrl).toBe("https://docs.railway.com/deployments/serverless");
+      expect(checked.notes).toEqual([]);
+    });
+
+    it("refuses a rewrite whose quote is not on the page it cites", () => {
+      const invented: RecommendedAction = {
+        type: "consider_enhancing",
+        feature: "Serverless",
+        detail: "Add per-request billing to Serverless so a sleeping service costs nothing.",
+        gap: "Railway bills a container by the minute while it is awake, with no per-request option",
+        evidenceUrl: "https://docs.railway.com/deployments/serverless",
+        evidenceQuote: "Railway meters a sleeping container per request",
+      };
+
+      const checked = check(invented, ["https://docs.railway.com/deployments/serverless"]);
+      expect(checked.action).toBeNull();
+      expect(checked.notes.join(" ")).toContain("its quote is not on");
+    });
+
+    it("refuses a rewrite that moved the gap onto a page nobody read", () => {
+      const misread: RecommendedAction = {
+        type: "consider_enhancing",
+        feature: "Volumes",
+        detail: "Let a volume mount into more than one service at a time.",
+        gap: "no way to attach a persistent disk to more than one service",
+        evidenceUrl: "https://docs.railway.com/deployments/serverless",
+        evidenceQuote: "Railway bills a container by the minute while it is awake.",
+      };
+
+      const checked = check(misread, ["https://docs.railway.com/deployments/serverless"]);
+      expect(checked.action).toBeNull();
+      expect(checked.notes.join(" ")).toContain("https://docs.railway.com/volumes");
+    });
+
+    it("shapes the surviving rewrite's opening sentence, the same as the first time", () => {
+      const backwards: RecommendedAction = {
+        type: "consider_enhancing",
+        feature: "Serverless",
+        detail:
+          "Railway bills a sleeping service by the minute. Add per-request billing so an idle service costs nothing.",
+        gap: "Railway bills a container by the minute while it is awake, with no per-request option",
+        evidenceUrl: "https://docs.railway.com/deployments/serverless",
+        evidenceQuote: "Railway bills a container by the minute while it is awake.",
+      };
+
+      const checked = check(backwards, ["https://docs.railway.com/deployments/serverless"]);
+      expect(checked.action?.detail).not.toMatch(/^Railway bills a sleeping service/);
+    });
   });
 
   it("drops a page edit aimed at the product docs before anything else looks at it", () => {

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   checkEnv,
@@ -153,6 +154,31 @@ describe("the environment preflight", () => {
     for (const requirement of REQUIREMENTS) {
       expect(requirement.purpose, requirement.name).not.toBe("");
       expect(requirement.howToGet, requirement.name).not.toBe("");
+    }
+  });
+});
+
+/**
+ * A variable in the code and nowhere else is a variable nobody is told about.
+ * `check-env` reads the requirements list, and `.env.example` is what a person
+ * copies for a local run, so the two have to hold the same names.
+ */
+describe(".env.example", () => {
+  const text = readFileSync(".env.example", "utf8");
+  const declared = new Set(
+    text
+      .split("\n")
+      .map((line) => /^#?\s*([A-Z0-9_]+)=/.exec(line.trim())?.[1])
+      .filter((name): name is string => Boolean(name)),
+  );
+
+  it.each(REQUIREMENTS.map((requirement) => requirement.name))("documents %s", (name) => {
+    expect(declared).toContain(name);
+  });
+
+  it("carries no editor artifacts, which would break the file it is copied into", () => {
+    for (const line of text.split("\n")) {
+      expect(line, line).not.toMatch(/^\s*\d+\|/);
     }
   });
 });
