@@ -9,6 +9,7 @@ import { createStore } from "./db/index.js";
 import { itemKey, type PendingPost, type Store } from "./db/store.js";
 import { buildDiscordMessage, type DiscordMessage } from "./discord/embed.js";
 import { BotPoster, ConsolePoster, type DiscordPoster } from "./discord/post.js";
+import { postQuietDay } from "./discord/quiet-day.js";
 import {
   buildIssueDrafts,
   createIssueCreator,
@@ -98,6 +99,8 @@ export interface RunSummary {
   /** Issues the reviewer closed as not planned, having read the docs behind them. */
   issuesClosed: number;
   posted: number;
+  /** Whether this run told the channel there was nothing to tell it. */
+  quietDay: boolean;
   notes: string[];
 }
 
@@ -392,6 +395,7 @@ export async function runCycle(config: Config): Promise<RunSummary> {
     issuesOpened: 0,
     issuesClosed: 0,
     posted: 0,
+    quietDay: false,
     notes: [],
   };
 
@@ -474,6 +478,16 @@ export async function runCycle(config: Config): Promise<RunSummary> {
         );
       }
     }
+
+    // Once, at the end, because the channel is owed an answer on a morning
+    // when neither competitor shipped anything. Every reason not to send it is
+    // in `quietDayMessage`, and each one is a run that should stay quiet.
+    summary.quietDay = await postQuietDay(poster, {
+      alerts: pending.length + fresh.length,
+      newItems: summary.newItems,
+      sourcesRead: collection.sourcesRead,
+      unread: collection.unread,
+    });
 
     return summary;
   } finally {

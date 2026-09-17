@@ -34,6 +34,12 @@ export interface DiscordEmbed {
 }
 
 export interface DiscordMessage {
+  /**
+   * Plain text above the embeds. An alert has none: everything it says belongs
+   * in the embed. A day with nothing to report is only this – see
+   * `src/discord/quiet-day.ts`.
+   */
+  content?: string;
   embeds: DiscordEmbed[];
   /** Nothing in an alert should ever ping anyone. */
   allowed_mentions: { parse: [] };

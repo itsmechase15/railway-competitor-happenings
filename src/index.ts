@@ -104,8 +104,9 @@ async function main(): Promise<void> {
   // Only mentioned when it happened: on most days the reviewer closes nothing,
   // and a "0 closed on review" on every line teaches people to skip the line.
   const closed = summary.issuesClosed > 0 ? ` (${summary.issuesClosed} closed on review)` : "";
+  const quiet = summary.quietDay ? ", nothing to report and the channel was told so" : "";
   log.info(
-    `done in ${seconds}s – ${summary.candidates} candidates, ${summary.newItems} new (${summary.seeded} seeded), ${summary.analyzed} analyzed${retried}, ${summary.issuesOpened} issues opened${closed}, ${summary.posted} posted`,
+    `done in ${seconds}s – ${summary.candidates} candidates, ${summary.newItems} new (${summary.seeded} seeded), ${summary.analyzed} analyzed${retried}, ${summary.issuesOpened} issues opened${closed}, ${summary.posted} posted${quiet}`,
   );
   for (const note of summary.notes) log.info(`note: ${note}`);
 }

@@ -118,3 +118,21 @@ export const SOURCE_LABEL: Record<SourceId, string> = {
   x: "tweet",
   newsletter: "newsletter",
 };
+
+/**
+ * The same source named in a sentence rather than tagged on an item. A blog
+ * post is tagged `article` because that is what you land on, but the thing
+ * that was read is a blog, and "Render's article could not be read" would name
+ * a post nobody has.
+ */
+export const SOURCE_NOUN: Record<SourceId, string> = {
+  changelog: "changelog",
+  blog: "blog",
+  x: "X account",
+  newsletter: "newsletter",
+};
+
+/** One competitor's one source, as a sentence says it: "Render's changelog". */
+export function sourceName(competitorLabel: string, source: SourceId): string {
+  return `${competitorLabel}'s ${SOURCE_NOUN[source]}`;
+}
