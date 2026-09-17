@@ -365,6 +365,19 @@ competitor, and how long its sentences run. A table row is replaced with a
 table row. The bar is that a reader cannot tell which line on the page came
 from the bot.
 
+And it has to be the size of the thing it fixes. A page could nearly always
+carry more about a competitor, which is not a reason to put it there: the way
+this action goes wrong is a write-up of the launch pasted into whichever
+paragraph mentioned them. So the copy may add at most as many words as the
+passage it lands in already runs to, never more than a fifth of the whole page,
+and 45 words always fit, so a short page gets a clause or a sentence rather
+than a competitor's pricing mechanics. `src/analysis/proportion.ts` measures
+that against the stored page and the gate drops an edit that is over, with the
+numbers in an open question and a `not_a_gap` verdict naming the page. Nothing
+here shortens the copy, because shortening copy is writing it: the analyst is
+told the rule up front, and the review pass is given the measured sizes so a
+reviewer can ask for a shorter version and the writer knows how short.
+
 ## GitHub issues
 
 One issue per action that passed every check, in this repo, opened before the
@@ -397,10 +410,20 @@ the same page with the proposed copy in it.
 Taken off the live page. A headless browser opens it, shoots the window, puts
 the copy into that tab's own DOM, and shoots the window again from the same
 scroll offset. Nothing is published: the edit never leaves the tab, the tab is
-thrown away, and the After's caption in the issue says so. The copy that went
-in is highlighted on the second shot and nothing else is, for both a replace
-and an insert, so the edit is a yellow band in a thumbnail rather than a
-paragraph to find. The highlight is inline `!important` on a `<mark>`, which is
+thrown away, and the After's caption in the issue says so. What the edit adds
+is highlighted on the second shot and nothing else is, for both a replace and
+an insert, so the edit is a yellow band in a thumbnail rather than a paragraph
+to find.
+
+Adds, and not "the copy": a replacement usually keeps part of the line it
+replaces, and painting that part credits the bot with the page's own prose.
+`copyRuns` splits the copy against the line being replaced before anything
+reaches the browser, so retained wording stays plain and the browser only has
+to put marks where it is told. A word or two the two lines happen to share is
+closed over rather than breaking one new sentence into three marks; the word
+the copy opens on stays plain. A paragraph after the first, and an insert,
+arrive as new blocks on the page and are new in full. The highlight is inline
+`!important` on a `<mark>`, which is
 the one thing a docs site's own styling for `mark` cannot outrank, and it is
 named in the caption because it is not paint anybody put on the page. The line
 is found by

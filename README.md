@@ -53,7 +53,15 @@ a compare, migrate, pricing, or features page is now wrong, it reads that page,
 quotes the line as it stands, and writes the replacement out in full, in that
 page's own voice, so the issue is a copy and a paste rather than a writing
 assignment. "Mention the new thing here" is not an edit, and an action that
-proposes one is dropped like any other unevidenced claim. The issue also shows
+proposes one is dropped like any other unevidenced claim. Nor is a write-up of
+the launch: the edit has to be the size of the thing it fixes, which in
+practice is a clause, a sentence, or a table row. The copy may add at most as
+many words as the passage it lands in already runs to and never more than a
+fifth of the page, measured against the stored page, so a page of two or three
+paragraphs gets a little and not a page of somebody else's pricing mechanics.
+Over that, the action is dropped with the numbers said out loud, because a page
+that reads as a competitor write-up is worse than a page that is a sentence out
+of date. The issue also shows
 the page itself twice: a screenshot of it as it reads today, and one of the
 same page with the proposed copy in it. See
 [Before and after on a page edit](#before-and-after-on-a-page-edit).
@@ -103,9 +111,16 @@ paste. The first question the person making the edit has is what the page looks
 like with that copy on it, and no amount of text answers it. So the issue shows
 two screenshots of the page, stacked: **Before**, the page as it reads today,
 and **After**, the same page with the proposed copy in it, sidebar, heading,
-type and all. On the After, and on the After only, the recommended copy is
+type and all. On the After, and on the After only, what the edit adds is
 highlighted in yellow, so the reader sees which words are the recommendation
 without reading one shot against the other to find them.
+
+What it *adds*, which is not the same as the copy. Most replacements keep part
+of the line they replace, so the copy is split against that line before it
+reaches the browser: new wording is marked, wording the page already has stays
+plain, and a word or two the two lines happen to share is closed over rather
+than breaking one new sentence into three marks. A reader glancing at the
+thumbnail should see the bot's sentences and not the page's own.
 
 They are taken off the **live page**. A headless browser opens it, photographs
 the window, puts the copy into that tab's own document, and photographs the
