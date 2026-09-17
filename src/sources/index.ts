@@ -1,4 +1,5 @@
 import { COMPETITORS, COMPETITOR_IDS, type CompetitorConfig, type Config } from "../config.js";
+import { sourceName } from "../labels.js";
 import { createLogger } from "../log.js";
 import type { CandidateItem, CompetitorId, SourceId } from "../types.js";
 import { type ArticleCard, extractArticleCards, extractLinks } from "../util/html.js";
@@ -27,6 +28,13 @@ export interface CollectionResult {
   candidates: CandidateItem[];
   /** Per-source notes surfaced in the run summary, e.g. why X was skipped. */
   notes: string[];
+  /**
+   * How many sources answered. What a run may claim about a quiet morning
+   * rests on this: a run that read nothing knows nothing.
+   */
+  sourcesRead: number;
+  /** The ones that did not answer, named for a sentence: "Render's changelog". */
+  unread: string[];
 }
 
 function http(config: Config) {
@@ -148,14 +156,23 @@ async function collectX(config: Config, competitor: CompetitorConfig): Promise<C
 export async function collectCandidates(config: Config): Promise<CollectionResult> {
   const candidates: CandidateItem[] = [];
   const notes: string[] = [];
+  const unread: string[] = [];
+  let sourcesRead = 0;
 
-  const run = async (label: string, task: () => Promise<CandidateItem[]>): Promise<void> => {
+  const run = async (
+    competitor: CompetitorConfig,
+    source: SourceId,
+    task: () => Promise<CandidateItem[]>,
+  ): Promise<void> => {
+    const label = `${competitor.id}/${source}`;
     try {
       candidates.push(...(await task()));
+      sourcesRead += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       log.error(`source ${label} failed: ${message}`);
       notes.push(`${label}: failed (${message})`);
+      unread.push(sourceName(competitor.label, source));
     }
   };
 
@@ -164,11 +181,11 @@ export async function collectCandidates(config: Config): Promise<CollectionResul
     // A competitor with no changelog feed is not a broken source: Vercel is
     // read from its blog and nothing else, so there is nothing to note.
     const feed = competitor.changelogFeed;
-    if (feed) await run(`${id}/changelog`, () => collectChangelog(config, competitor, feed));
-    await run(`${id}/blog`, () => collectBlog(config, competitor));
+    if (feed) await run(competitor, "changelog", () => collectChangelog(config, competitor, feed));
+    await run(competitor, "blog", () => collectBlog(config, competitor));
 
     if (config.xBearerToken) {
-      await run(`${id}/x`, () => collectX(config, competitor));
+      await run(competitor, "x", () => collectX(config, competitor));
     }
   }
 
@@ -180,7 +197,7 @@ export async function collectCandidates(config: Config): Promise<CollectionResul
 
   // Newsletters are phase 2: the inbox they arrive in does not exist yet, and
   // a source with no inbox behind it would only ever log that it was skipped.
-  return { candidates, notes };
+  return { candidates, notes, sourcesRead, unread };
 }
 
 export interface SourceGroup {

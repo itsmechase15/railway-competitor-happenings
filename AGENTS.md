@@ -84,6 +84,15 @@ which is what you want on a box with no Chromium: run
  nothing specific to say: `test/no-action.test.ts` greps `src/` for the
  platitudes this replaced and fails on a hit. Writing one means naming the
  capability and the page, or picking the kind that admits it does not know.
+- **A morning with nothing in it is posted, not skipped.** A daily run that
+ read the sources and found nothing new posts one plain line, because silence
+ and a broken job read identically in a channel. It is held back by three
+ things and only those three – an alert already went out, something new turned
+ up and never became an alert, or not one source could be read – and each is a
+ run that cannot honestly call the day quiet. It is not an embed, it is not
+ stored, it is not retried, and posting one URL by hand never triggers it. See
+ [`src/discord/quiet-day.ts`](./src/discord/quiet-day.ts) and
+ `test/quiet-day.test.ts`.
 - **"Railway already does this" is evidence, not a mood.** The comfortable
  answer is a claim about the product, so it is checked the way a gap claim is:
  the page has to be in the corpus, be product documentation, and contain the
