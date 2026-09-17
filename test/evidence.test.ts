@@ -8,6 +8,7 @@ import {
   quoteAppearsOn,
   type CoverageContext,
 } from "../src/analysis/evidence.js";
+import { allowedWords, measureEdit, MIN_ADDED_WORDS } from "../src/analysis/proportion.js";
 import type { CorpusIndex } from "../src/railway/retrieval.js";
 import type { Analysis, RecommendedAction } from "../src/types.js";
 import { analysis, corpusIndex } from "./helpers.js";
@@ -424,6 +425,186 @@ describe("checking a page edit", () => {
       context(),
     );
     expect(blocked).toEqual([]);
+  });
+});
+
+/**
+ * The mistake this stops is the one Railway issue #27 filed: a true, well
+ * written paragraph about Vercel's new CDN pricing pasted into a paragraph of
+ * the compare page that ran to two sentences. Every other check passed it,
+ * because every other check asks whether the edit is right rather than whether
+ * it is the size of the thing being fixed.
+ */
+describe("how much a page edit may add", () => {
+  const COMPARE_URL = "https://docs.railway.com/platform/compare-to-vercel";
+
+  /** A page with paragraphs the length a compare page actually writes them. */
+  const PAGE_TEXT = [
+    "Vercel and Railway both deploy from a repository, and they meter what runs very differently.",
+    "This makes it possible for you to pay for what you use. However, since Vercel runs on AWS, the unit economics of the business need to be high to offset the cost of the underlying infrastructure. Those extra costs are then passed down to you as the user, so you end up paying extra for resources such as bandwidth, memory, CPU and storage.",
+    "Railway follows a usage-based pricing model that depends on how long your service runs and the amount of resources it consumes.",
+    "Both platforms give you a managed Postgres with daily backups, and both run a build on every push to the branch you deploy from.",
+  ].join("\n\n");
+
+  const CLAIM =
+    "Those extra costs are then passed down to you as the user, so you end up paying extra for resources such as bandwidth, memory, CPU and storage.";
+
+  /** One clause, which is what the launch actually makes the page wrong about. */
+  const IN_PROPORTION = `${CLAIM.replace(" bandwidth,", "")} Bandwidth is the exception on Pro, where a flat rate now covers CDN requests and data transfer.`;
+
+  /** The same correction with the competitor's launch post written out around it. */
+  const A_DUMP = `${IN_PROPORTION} Vercel's Flat Rate CDN bundles CDN requests and data transfer into a fixed monthly fee, with the default tier included in the plan and higher tiers for more capacity, so a traffic spike does not turn into an overage. On Railway, egress is billed at $0.05/GB and CDN caching is available on all plans at no additional cost, so a cached response is served from the edge and incurs no egress at all.`;
+
+  const pageIndex = (): CorpusIndex =>
+    corpusIndex([
+      { url: COMPARE_URL, title: "Compare to Vercel", kind: "marketing", text: PAGE_TEXT },
+      { url: "https://docs.railway.com/networking/cdn", title: "CDN", text: "Railway caches a response at the edge on every plan." },
+    ]);
+
+  const pageEdit = (proposedText: string): Analysis =>
+    withAction(
+      {
+        type: "update_pages",
+        detail:
+          "On the compare to vercel page, say Vercel's flat rate CDN now covers requests and transfer, and that Railway caches at the edge on every plan.",
+      },
+      {
+        summary: "Vercel put CDN requests and data transfer on a flat monthly rate.",
+        railwayRefs: [
+          {
+            url: COMPARE_URL,
+            claim: CLAIM,
+            suggestedEdit: "Answer the flat rate CDN on the bandwidth line.",
+            proposedText,
+            editKind: "replace",
+          },
+        ],
+      },
+    );
+
+  const gate = (proposedText: string) =>
+    gateActions(pageEdit(proposedText), { index: pageIndex(), seenUrls: new Set([COMPARE_URL]) });
+
+  it("files a correction the size of the passage it lands in", () => {
+    const { analysis: gated, blocked } = gate(IN_PROPORTION);
+    expect(blocked).toEqual([]);
+    expect(gated.actions).toHaveLength(1);
+  });
+
+  it("drops an edit that puts a write-up of the launch on the page", () => {
+    const { analysis: gated, blocked } = gate(A_DUMP);
+
+    expect(gated.actions).toEqual([]);
+    expect(blocked[0]?.cause).toBe("page_edit_out_of_proportion");
+    expect(blocked[0]?.reason).toContain("out of proportion to the page it goes on");
+    // The numbers are the whole argument, so the reader is given them.
+    expect(blocked[0]?.reason).toMatch(/puts \d+ words onto a \d+-word passage/);
+    expect(blocked[0]?.urls).toEqual([COMPARE_URL]);
+  });
+
+  it("says a page that needs no write-up is not a gap, and points at the page", () => {
+    const { analysis: gated } = gate(A_DUMP);
+
+    expect(gated.noAction?.kind).toBe("not_a_gap");
+    expect(gated.noAction?.reason).toContain("No page edit is filed here");
+    expect(gated.noAction?.reason).toMatch(/\d+-word passage/);
+  });
+
+  it("lets a sentence or two onto a page too short to have room for anything", () => {
+    const short = corpusIndex([
+      {
+        url: COMPARE_URL,
+        title: "Compare to Vercel",
+        kind: "marketing",
+        text: "Vercel meters functions. Railway meters a container by the minute.",
+      },
+    ]);
+    const copy =
+      "Railway meters a container by the minute, and a flat rate now covers Vercel's CDN requests and data transfer.";
+
+    const { blocked } = gateActions(
+      withAction(
+        {
+          type: "update_pages",
+          detail:
+            "On the compare to vercel page, say a flat rate now covers Vercel's CDN requests and data transfer.",
+        },
+        {
+          summary: "Vercel put CDN requests and data transfer on a flat monthly rate.",
+          railwayRefs: [
+            {
+              url: COMPARE_URL,
+              claim: "Railway meters a container by the minute.",
+              suggestedEdit: "Answer the flat rate CDN.",
+              proposedText: copy,
+              editKind: "replace",
+            },
+          ],
+        },
+      ),
+      { index: short, seenUrls: new Set([COMPARE_URL]) },
+    );
+
+    expect(blocked).toEqual([]);
+  });
+});
+
+describe("measuring one page edit against its page", () => {
+  const PAGE_TEXT = [
+    "Railway and Render both run your containers.",
+    "Railway stops an idle container and bills it by the minute while it is awake. Render keeps a web service running until you scale it down yourself.",
+    "Both platforms give you a managed Postgres with daily backups.",
+  ].join("\n\n");
+
+  const CLAIM = "Render keeps a web service running until you scale it down yourself.";
+
+  it("counts what the edit adds, the passage it lands in, and the whole page", () => {
+    const measured = measureEdit(
+      {
+        url: "https://docs.railway.com/platform/compare-to-render",
+        claim: CLAIM,
+        proposedText: `${CLAIM} It bills that service per request once it goes idle.`,
+      },
+      PAGE_TEXT,
+    )!;
+
+    // The kept sentence is the page's, so only the new one counts as added.
+    expect(measured.added).toBe(10);
+    expect(measured.passage).toBe(27);
+    expect(measured.page).toBe(44);
+  });
+
+  it("measures an insert as all of it arriving, because an insert removes nothing", () => {
+    const inserted = measureEdit(
+      {
+        url: "https://docs.railway.com/platform/compare-to-render",
+        claim: CLAIM,
+        proposedText: CLAIM,
+        editKind: "insert",
+      },
+      PAGE_TEXT,
+    )!;
+    expect(inserted.added).toBe(12);
+  });
+
+  it("allows the passage's own length, a fifth of the page, and never less than a sentence or two", () => {
+    // A long page is bounded by the passage the edit lands in.
+    expect(allowedWords(60, 2_000)).toBe(60);
+    // A long passage on a short page is bounded by the page.
+    expect(allowedWords(400, 600)).toBe(120);
+    // Both bounds are below the floor, which is what a short page gets.
+    expect(allowedWords(20, 120)).toBe(MIN_ADDED_WORDS);
+  });
+
+  it("measures nothing without copy, and nothing without a stored page to measure against", () => {
+    const ref = {
+      url: "https://docs.railway.com/platform/compare-to-render",
+      claim: CLAIM,
+      proposedText: "Copy long enough to be a line somebody would paste on the page.",
+    };
+    expect(measureEdit({ ...ref, proposedText: undefined }, PAGE_TEXT)).toBeNull();
+    expect(measureEdit(ref, undefined)).toBeNull();
+    expect(measureEdit(ref, "   ")).toBeNull();
   });
 });
 

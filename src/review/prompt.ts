@@ -1,4 +1,9 @@
 import { PAGE_REWRITE_RULES, STYLE_RULES } from "../analysis/prompt.js";
+import {
+  MIN_ADDED_WORDS,
+  renderProportion,
+  type EditProportion,
+} from "../analysis/proportion.js";
 import { COMPETITORS } from "../config.js";
 import { MAX_ACTION_CHARS } from "../discord/embed.js";
 import { actionLabel } from "../labels.js";
@@ -22,6 +27,19 @@ import type { ReviewDecision } from "./schema.js";
 const MAX_EXCERPT_CHARS = 900;
 const MAX_DETAIL_CHARS = 1_200;
 
+/**
+ * How long each page an action would edit runs, and how much of the copy
+ * proposed for it is new, by page URL.
+ *
+ * Measured against the stored page by `src/analysis/proportion.ts`, the same
+ * way the gate measures it. It is in the prompt because proportion is the half
+ * of a page edit neither model can judge from an excerpt: a reviewer counting
+ * words by eye gets it wrong, and a writer asked for something shorter has to
+ * be told how much shorter. Empty when nothing measured it, which reads as no
+ * line at all rather than as a page with no size.
+ */
+export type EditProportions = Map<string, EditProportion>;
+
 export interface ReviewInput {
   /** The alert the action came out of, with the docs it was checked against. */
   alert: AnalyzedItem;
@@ -30,6 +48,7 @@ export interface ReviewInput {
   workspace: DocsWorkspace | null;
   /** Corpus excerpts already ranked for this signal, as a starting point. */
   docs: RailwayDoc[];
+  proportions?: EditProportions;
 }
 
 export interface RewriteInput {
@@ -37,6 +56,7 @@ export interface RewriteInput {
   action: RecommendedAction;
   /** What the reviewer decided and what it asked for. */
   review: ReviewDecision;
+  proportions?: EditProportions;
   /**
    * Every page the rewrite may quote: the excerpts the analysis was checked
    * against, plus the pages the reviewer opened. A quote from anywhere else
@@ -68,7 +88,11 @@ function renderDocs(docs: RailwayDoc[]): string {
  * replace, and for an `update_pages` action the proposed copy is the substance
  * of the recommendation, so it is shown in full rather than summarized.
  */
-function renderEdits(refs: RailwayRef[], action: RecommendedAction): string {
+function renderEdits(
+  refs: RailwayRef[],
+  action: RecommendedAction,
+  proportions: EditProportions,
+): string {
   // For a page action, every page it could edit is listed whether or not copy
   // came back for it, because a page action with no copy is itself the finding.
   const edits = isPageAction(action)
@@ -85,13 +109,19 @@ function renderEdits(refs: RailwayRef[], action: RecommendedAction): string {
       );
       if (ref.editKind) lines.push(`  what the copy does: ${ref.editKind}s the line above`);
       if (ref.suggestedEdit) lines.push(`  why: "${ref.suggestedEdit}"`);
+      const proportion = proportions.get(ref.url);
+      if (proportion) lines.push(`  how much it adds: ${renderProportion(ref.url, proportion)}`);
       return lines.join("\n");
     })
     .join("\n");
 }
 
 /** One action exactly as it was filed, so both models judge the same thing. */
-export function renderFiledAction(alert: AnalyzedItem, action: RecommendedAction): string {
+export function renderFiledAction(
+  alert: AnalyzedItem,
+  action: RecommendedAction,
+  proportions: EditProportions = new Map(),
+): string {
   const competitor = COMPETITORS[alert.item.competitor].label;
   return [
     `Competitor: ${competitor}`,
@@ -107,7 +137,7 @@ export function renderFiledAction(alert: AnalyzedItem, action: RecommendedAction
     `Gap claimed: ${action.gap ?? "(none)"}`,
     `Evidence page: ${action.evidenceUrl ?? "(none)"}`,
     `Evidence quote: ${action.evidenceQuote ? `"${action.evidenceQuote}"` : "(none)"}`,
-    `Pages it asks someone to edit:\n${renderEdits(alert.analysis.railwayRefs, action)}`,
+    `Pages it asks someone to edit:\n${renderEdits(alert.analysis.railwayRefs, action, proportions)}`,
   ].join("\n");
 }
 
@@ -147,6 +177,7 @@ One of three, and the middle one is the interesting one.
   - It says consider_building where Railway has an adjacent product to enhance, or consider_enhancing where Railway has nothing in the area at all.
   - The impact label does not match what the post shipped.
   - For an update_pages action: the copy proposed for the page is wrong about what Railway does, or is a note about the edit rather than the words to put on the page, or restates what the page already says, or does not read as if it came off that page. An update_pages action with no proposed copy at all is a revise, not a drop: the recommendation may be right and the writing is missing.
+  - For an update_pages action: the copy is out of proportion to the page. Open the page and read it. A paragraph of the competitor's pricing mechanics on a page whose own paragraphs run to two sentences is a revise even when every word of it is true, and so is any detail the page would still be correct without. Ask for the shorter version and say which sentences of it earn their place. The sizes are measured for you under each page below; the rule is that the copy adds at most as many words as the passage it lands in, never more than a fifth of the page, and ${MIN_ADDED_WORDS} words always fit.
 - "drop": there is nothing to file. Railway already does this and you can name the pages that show it, or the gap is about what a competitor charges rather than what the product does, or the action asks for documentation to be written.
 
 The bar, which matters more than the list:
@@ -195,7 +226,7 @@ ${CALIBRATION}
 ${renderWorkspaceRules(input.workspace)}
 
 ## The action as filed
-${renderFiledAction(input.alert, input.action)}
+${renderFiledAction(input.alert, input.action, input.proportions ?? new Map())}
 
 ## Pre-loaded excerpts the analyst was shown
 The pages the analysis was checked against. A starting point, not the answer.
@@ -250,6 +281,7 @@ const PRODUCT_CHECKS = `- "evidence_url" has to be a Railway docs page, and it h
 - Never change the type into update_pages, and never out of it. That asks marketing to edit a Railway page, which is a different recommendation.`;
 
 const PAGE_CHECKS = `- "proposed_text" is the words that go on the page, and the check on it is mechanical: copy that opens with say, mention, note that, clarify, call out, reword, or an "add a line about" instruction is thrown out, and so is copy shorter than a sentence or two and copy leaving a placeholder in square brackets or a TODO for somebody else to resolve.
+- The length is mechanical too. The copy may add at most as many words as the passage it lands in already runs to, never more than a fifth of the whole page, and ${MIN_ADDED_WORDS} words of new copy always fit. The sizes for this page are under "Pages it asks someone to edit" above, so write to that number: copy over it is thrown away and the issue keeps the version you were asked to shorten.
 - Only a page this action already cites, and only one marketing writes: a compare page, a migrate page, pricing, or a features page. A product docs URL is always the wrong answer: the docs are the evidence, never the target.
 - "suggested_edit" is the one line saying what is wrong and what you are changing. It never stands in for "proposed_text".
 - "edit_kind" is "replace" when your copy takes the place of the line quoted above, or "insert" when it goes in beside it.`;
@@ -274,7 +306,7 @@ ${pageWork ? PAGE_CHECKS : PRODUCT_CHECKS}
   }
 ${pageWork ? `\n${PAGE_REWRITE_RULES}\n` : ""}
 ## The action as filed
-${renderFiledAction(alert, action)}
+${renderFiledAction(alert, action, input.proportions ?? new Map())}
 
 ## What the reviewer said
 ${renderReviewerAsk(review, alert.analysis.impact)}

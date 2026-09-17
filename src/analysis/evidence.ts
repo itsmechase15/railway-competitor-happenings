@@ -11,6 +11,12 @@ import type {
 } from "../types.js";
 import { firstSentence, truncate } from "../util/text.js";
 import { evidenceFor, noActionOf, withNoAction } from "./noAction.js";
+import {
+  describeProportion,
+  isOutOfProportion,
+  measureEdit,
+  type EditProportion,
+} from "./proportion.js";
 
 /**
  * The checks an action has to survive before anyone is asked to do it.
@@ -99,8 +105,27 @@ function isTableRow(copy: string): boolean {
   return copy.startsWith("|") && copy.split("|").length >= 3;
 }
 
-/** Why a piece of proposed copy is not something anybody could paste. */
-export type CopyFault = "missing" | "too_short" | "instruction" | "placeholder";
+/** Why a piece of proposed copy is not something anybody could paste, or not an edit. */
+export type CopyFault =
+  | "missing"
+  | "too_short"
+  | "instruction"
+  | "placeholder"
+  | "out_of_proportion";
+
+/**
+ * Which complaint a reader is told when a page action has more than one page to
+ * edit and every one of them faulted. Size first: an edit that says too much is
+ * the one with a shorter version worth asking for, and "it wrote nothing" is the
+ * least useful complaint of the set.
+ */
+const FAULT_ORDER: CopyFault[] = [
+  "out_of_proportion",
+  "instruction",
+  "placeholder",
+  "too_short",
+  "missing",
+];
 
 /**
  * Is this the edit, or a note asking for the edit?
@@ -126,6 +151,7 @@ const COPY_FAULT_REASON: Record<CopyFault, string> = {
   instruction:
     "it proposes an instruction rather than copy: the text has to read as the page reads, not as a note about the page",
   placeholder: "the copy it proposes leaves a placeholder for somebody else to fill in",
+  out_of_proportion: "the copy it proposes is out of proportion to the page it goes on",
 };
 
 function isProductAction(action: RecommendedAction): boolean {
@@ -268,6 +294,8 @@ export const BLOCK_CAUSES = [
   "page_edit_no_edit",
   "page_edit_no_copy",
   "page_edit_unusable",
+  /** The copy it proposes adds more than the page it lands on can carry. */
+  "page_edit_out_of_proportion",
   "page_edit_stale_claim",
 ] as const;
 export type BlockCause = (typeof BLOCK_CAUSES)[number];
@@ -400,18 +428,27 @@ function checkPageAction(
   // The copy is the recommendation. A page edit that arrives as "mention the
   // new thing here" hands the writing back to the person reading the issue,
   // who has none of the context the analysis just spent a whole run building.
-  const faults = editable
-    .map((ref) => copyFault(ref.proposedText))
-    .filter((fault): fault is CopyFault => fault !== null);
-  if (faults.length === editable.length) {
-    // "It wrote nothing" is the least useful complaint of the set, so a page
-    // that tried and missed is the one the open question names.
-    const worst = faults.find((fault) => fault !== "missing") ?? "missing";
+  // An edit three times the length of the paragraph it lands in hands them
+  // something worse: a page that is now mostly about the competitor.
+  const checked = editable.map((ref) => checkCopy(ref, context));
+  if (checked.every((entry) => entry.fault !== null)) {
+    const worst = FAULT_ORDER.find((fault) => checked.some((entry) => entry.fault === fault));
+    const pages = editable.map((ref) => ref.url);
+    const oversize = checked.find((entry) => entry.fault === "out_of_proportion");
+
+    if (oversize?.proportion) {
+      return block(
+        action,
+        "page_edit_out_of_proportion",
+        `${COPY_FAULT_REASON.out_of_proportion}: ${describeProportion(oversize.ref.url, oversize.proportion)}`,
+        pages,
+      );
+    }
     return block(
       action,
       worst === "missing" ? "page_edit_no_copy" : "page_edit_unusable",
-      `${COPY_FAULT_REASON[worst]} (${editable.map((ref) => ref.url).join(" or ")})`,
-      editable.map((ref) => ref.url),
+      `${COPY_FAULT_REASON[worst ?? "missing"]} (${pages.join(" or ")})`,
+      pages,
     );
   }
 
@@ -425,6 +462,27 @@ function checkPageAction(
     );
   }
   return null;
+}
+
+/** One page's proposed copy, and what is wrong with it. */
+interface CheckedCopy {
+  ref: RailwayRef;
+  fault: CopyFault | null;
+  /** How the edit compares to the page, when there was a stored page to measure against. */
+  proportion: EditProportion | null;
+}
+
+/**
+ * Both questions about one page's copy: whether it is something a person could
+ * paste, and whether the page it goes on can carry that much of it. Neither is
+ * about what the copy says, which is what reading the page is for.
+ */
+function checkCopy(ref: RailwayRef, context: CoverageContext): CheckedCopy {
+  const proportion = measureEdit(ref, context.index.page(ref.url)?.text);
+  const fault =
+    copyFault(ref.proposedText) ??
+    (proportion && isOutOfProportion(proportion) ? "out_of_proportion" : null);
+  return { ref, fault, proportion };
 }
 
 /**
@@ -546,6 +604,9 @@ function kindForCause(cause: BlockCause): NoActionKind {
       return "already_covered";
     case "packaging":
     case "docs_only":
+    // Nothing here is unverified: the page is real, the line on it is real, and
+    // the answer is that the page does not need this much said on it.
+    case "page_edit_out_of_proportion":
       return "not_a_gap";
     case "no_gap":
     case "no_evidence":
@@ -581,6 +642,10 @@ function notAGapReason(blocked: BlockedAction[]): string {
   const packaging = blocked.find((entry) => entry.cause === "packaging");
   if (packaging) {
     return `The only thing recommended was about what a competitor charges rather than what Railway can do ("${truncate(packaging.action.gap ?? "", 120)}"), and pricing is not a capability Railway is missing.`;
+  }
+  const oversize = blocked.find((entry) => entry.cause === "page_edit_out_of_proportion");
+  if (oversize) {
+    return `No page edit is filed here: ${oversize.reason}, so it would have turned the page into a write-up of the launch rather than correcting the line the launch makes wrong.`;
   }
   return "The only thing recommended was writing docs about something Railway already ships, which is a docs job rather than a product gap.";
 }
