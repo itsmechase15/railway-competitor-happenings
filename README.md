@@ -35,6 +35,15 @@ run". Rendering happens once, in
 [`src/analysis/noAction.ts`](./src/analysis/noAction.ts), so the Discord embed
 and a closed GitHub issue say the same three things.
 
+A morning where nothing shipped gets a message too: one line, no embed, saying
+there are no new competitor products or features today. Silence is the one
+answer a channel cannot read, because a bot that looked and found nothing and a
+bot that fell over in the night are indistinguishable from the outside. It is
+held back on any run that has no business claiming a quiet day: one that posted
+an alert, one where something new turned up and never became an alert, and one
+that could not read a single source. A feed that failed while the others
+answered is named on the end of the line.
+
 The mistake this bot is built to avoid is the opposite one – a GitHub issue
 telling Railway to build something Railway already ships – because that issue
 costs a reader's trust in every alert after it.
@@ -255,7 +264,7 @@ embed shape, docs grounding, data store, impact scale, actions, and phasing.
 
 | Workflow | When | What it does |
 | --- | --- | --- |
-| `daily.yml` | 14:00 UTC (7am PT), or by hand | One full cycle: refresh the Railway index, collect, dedupe, analyze, open issues, review them, post |
+| `daily.yml` | 14:00 UTC (7am PT), or by hand | One full cycle: refresh the Railway index, collect, dedupe, analyze, open issues, review them, post – or say the morning held nothing |
 | `force-post.yml` | By hand, or a URL committed to `.github/force-post-url.txt` | Posts one named announcement, ignoring dedupe and the first-run seed guard |
 | `check-secrets.yml` | By hand | Names every missing secret and asks Discord what the bot can see. Posts nothing |
 | `ci.yml` | Push and pull request | Typecheck, tests, build |
@@ -396,7 +405,7 @@ off when you are iterating on something else.
 | `src/analysis/evidence.ts` | The gate: citations, quotes, the coverage check, page edits |
 | `src/analysis/` | The prompt, the reply schema, the docs-grounding guards, and the no-key fallback |
 | `src/review/` | The one-pass review: the two prompts, what a rewrite may change, and the code that re-checks it |
-| `src/discord/` | The embed and the bot that posts it |
+| `src/discord/` | The embed, the line a morning with nothing in it gets instead, and the bot that posts both |
 | `src/github/` | One issue per recommended action that passed every check, and the edits a verdict writes back |
 | `src/db/` | Postgres, the in-memory store for dry runs, and the dedupe contract |
 | `src/pipeline.ts` | The daily cycle, and single-item mode |

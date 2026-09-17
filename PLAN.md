@@ -95,6 +95,8 @@ GitHub Actions cron at **14:00 UTC (7am PT)**. One run does:
    re-links instead of re-filing.
 8. **Post** one Discord embed per item, then stamp `analyses.posted_at`. An
    unstamped post is retried for up to three days.
+9. **Say so when there was nothing.** A run that read the sources and found
+   nothing new posts one line rather than nothing at all. See A quiet morning.
 
 Caps: `MAX_ITEMS_PER_SOURCE` (8) and `MAX_ITEMS_PER_RUN` (12). The first run
 for each competitor + source records the backlog without alerting, so turning
@@ -122,6 +124,22 @@ Embed shape, in this order and nothing else:
    does this** or one of the other four kinds, the sentence under it, and a
    `See:` line linking the docs pages it rests on.
 6. **Footer** – competitor · source · model.
+
+### A quiet morning
+
+Most mornings nothing ships. The channel used to get silence on those, which
+reads the same as a broken job, so a run that read the competitors and found
+nothing new posts one plain line instead: *No new competitor products or
+features today. Nothing new from Render or Vercel.* Text, not an embed – an
+embed is the shape a launch arrives in.
+
+Three things hold it back, and each is a run that has no business claiming the
+day was quiet: an alert of any kind went out (one is enough, and a retried one
+counts), a new item turned up and never became an alert (a seeded backlog, or
+an analysis that gave up – the run log says which), or not one source could be
+read, which is a blind morning rather than a quiet one. A source that failed
+while others answered is named on the end of the line rather than counted as
+quiet. Posting one named URL by hand is not a daily run and never adds it.
 
 Page citations, the copy a page edit proposes, and open questions live in the
 issue, not the embed. A page edit's sentence names the page and one line under
