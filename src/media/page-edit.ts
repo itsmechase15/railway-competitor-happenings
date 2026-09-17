@@ -1,6 +1,6 @@
 import type { EditKind, RailwayRef } from "../types.js";
 import { pageNameFromUrl, sha1, titleFromUrl } from "../util/text.js";
-import { diffSummary, diffWords } from "./diff.js";
+import { afterSpans, diffSummary, diffWords, wordCount } from "./diff.js";
 
 /**
  * What there is to photograph about one page edit: which page, which line on
@@ -28,6 +28,13 @@ export interface PageEditPlan {
   claim: string;
   /** The copy the issue asks somebody to put there. */
   proposedText: string;
+  /**
+   * The same copy, paragraph by paragraph, split into the runs the After shot
+   * paints and the runs it leaves plain. This is what the browser stages, so
+   * the only words that end up highlighted are the words the page does not
+   * have today.
+   */
+  copy: CopyRun[][];
   /** What changed, in words. Shown under the pair and in the issue body. */
   summary: string;
   beforeAlt: string;
@@ -125,13 +132,111 @@ export function looseSpan(haystack: string, needle: string): [number, number] | 
   return [start, end];
 }
 
+/** A text as the paragraphs it was written as, blank ones dropped. */
+export function paragraphsOf(text: string): string[] {
+  return text
+    .split(/\n{2,}/)
+    .map((part) => part.trim())
+    .filter((part) => part !== "");
+}
+
 /** The paragraph a quoted line is on. Corpus text keeps its paragraph breaks. */
 export function paragraphWith(pageText: string, claim: string): string | null {
-  for (const paragraph of pageText.split(/\n{2,}/)) {
-    const trimmed = paragraph.trim();
-    if (trimmed && looseSpan(trimmed, claim)) return trimmed;
+  for (const paragraph of paragraphsOf(pageText)) {
+    if (looseSpan(paragraph, claim)) return paragraph;
   }
   return null;
+}
+
+/** One run of the proposed copy, and whether the After shot paints it. */
+export interface CopyRun {
+  text: string;
+  /** The page does not say these words today, so this run is the edit. */
+  isNew: boolean;
+}
+
+/**
+ * How short a retained run has to be before the highlight closes over it
+ * rather than breaking around it.
+ *
+ * A replacement usually keeps some of the line it replaces, and those words
+ * are the page's rather than the edit's, so they stay plain. But a word or two
+ * the copy happens to share with the old line – "a web service", "it", the
+ * competitor's name – is not wording anybody recognizes as the page's, and
+ * painting around each of them turns one new sentence into confetti. So a
+ * short retained run inside new copy is treated as part of it. A run at either
+ * end is never absorbed, however short: the words leading into or out of the
+ * edit are where the page's own prose picks up again.
+ */
+const MIN_RETAINED_WORDS = 5;
+
+/**
+ * The proposed copy as runs, marked with what the page does not have yet.
+ *
+ * This is the whole of the delta the After shot points at. Wrapping the copy
+ * in one mark is what it used to do, and on a replacement that keeps a
+ * sentence of the old line – the common shape, because an edit usually adds to
+ * a paragraph rather than rewriting it – that painted the page's own prose as
+ * if the bot had written it.
+ *
+ * Only the paragraph that takes the line's place is measured against it, so a
+ * replacement that keeps the sentence it replaces leaves that sentence plain.
+ * Everything after it arrives as a new block on the page and is new in full,
+ * and so is an insert, which takes nothing off the page at all. That is the
+ * same basis the caption's word counts use.
+ */
+export function copyRuns(claim: string, proposedText: string, editKind: EditKind): CopyRun[][] {
+  return paragraphsOf(proposedText).map((paragraph, index) =>
+    runsFor(editKind === "insert" || index > 0 ? "" : claim, paragraph),
+  );
+}
+
+function runsFor(basis: string, paragraph: string): CopyRun[] {
+  const runs = afterSpans(basis, paragraph).map((span) => ({
+    text: span.text,
+    isNew: span.kind === "added",
+  }));
+  return unpaintEdges(absorbShortRetained(runs));
+}
+
+/** Consecutive runs of the same kind are one run, so a mark is never split in two. */
+function append(runs: CopyRun[], run: CopyRun): void {
+  const last = runs[runs.length - 1];
+  if (last && last.isNew === run.isNew) last.text += run.text;
+  else runs.push({ ...run });
+}
+
+/** Retained wording too short to recognize, when new copy runs either side of it. */
+function absorbShortRetained(runs: CopyRun[]): CopyRun[] {
+  const absorbed: CopyRun[] = [];
+  for (const [index, run] of runs.entries()) {
+    const island = index > 0 && index < runs.length - 1;
+    const short = wordCount(run.text) < MIN_RETAINED_WORDS;
+    append(absorbed, { ...run, isNew: run.isNew || (island && short) });
+  }
+  return absorbed;
+}
+
+/**
+ * The space around a run belongs outside the mark. A highlight that closes
+ * over the space after its last word is a yellow tab hanging off the end of
+ * the sentence.
+ */
+function unpaintEdges(runs: CopyRun[]): CopyRun[] {
+  const tidied: CopyRun[] = [];
+  for (const run of runs) {
+    if (!run.isNew) {
+      append(tidied, run);
+      continue;
+    }
+    const lead = run.text.length - run.text.trimStart().length;
+    const trail = run.text.length - run.text.trimEnd().length;
+    if (lead > 0) append(tidied, { text: run.text.slice(0, lead), isNew: false });
+    const core = run.text.slice(lead, run.text.length - trail);
+    if (core !== "") append(tidied, { text: core, isNew: true });
+    if (trail > 0) append(tidied, { text: run.text.slice(run.text.length - trail), isNew: false });
+  }
+  return tidied;
 }
 
 /** The page's own path as a file name fragment: "platform-compare-to-render". */
@@ -197,6 +302,7 @@ export function planPageEdit(
     editKind,
     claim,
     proposedText: proposed,
+    copy: copyRuns(claim, proposed, editKind),
     summary,
     beforeAlt: `${pageNameFromUrl(ref.url)} as it reads today, the quoted line in place`,
     afterAlt: `${name} with the proposed copy in it, highlighted in yellow: ${summary}`,

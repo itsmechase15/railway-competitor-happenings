@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { measureEdit, MIN_ADDED_WORDS } from "../src/analysis/proportion.js";
 import type { DocsWorkspace } from "../src/railway/workspace.js";
-import { buildReviewPrompt, buildRewritePrompt } from "../src/review/prompt.js";
+import {
+  buildReviewPrompt,
+  buildRewritePrompt,
+  type EditProportions,
+} from "../src/review/prompt.js";
 import { parseReview } from "../src/review/schema.js";
 import type { AnalyzedItem, RecommendedAction } from "../src/types.js";
 import { analysis, storedItem } from "./helpers.js";
@@ -57,6 +62,15 @@ const docs = [
 
 const workspace = { dir: "/tmp/corpus" } as DocsWorkspace;
 
+/** The compare page as the corpus holds it, and the edit measured against it. */
+const COMPARE_TEXT = [
+  "Railway and Render both deploy from a repository.",
+  "Railway stops an idle container; Render keeps it running. Both bill the compute a service uses while it is awake.",
+].join("\n\n");
+
+const measureEdits = (): EditProportions =>
+  new Map([[COMPARE, measureEdit(alert.analysis.railwayRefs[0]!, COMPARE_TEXT)!]]);
+
 describe("buildReviewPrompt", () => {
   const prompt = buildReviewPrompt({ alert, action, workspace, docs });
 
@@ -100,6 +114,38 @@ describe("buildReviewPrompt", () => {
     expect(prompt).toContain(
       "An update_pages action with no proposed copy at all is a revise, not a drop",
     );
+  });
+
+  /**
+   * Proportion is the half of a page edit neither model can judge off an
+   * excerpt, so the sizes are measured against the stored page and handed over
+   * with the copy rather than left to be counted by eye.
+   */
+  it("measures the copy against the page, so a reviewer is not counting words", () => {
+    const measured = buildReviewPrompt({
+      alert,
+      action: pageAction,
+      workspace,
+      docs,
+      proportions: measureEdits(),
+    });
+
+    expect(measured).toContain(`how much it adds: ${COMPARE} runs to`);
+    expect(measured).toMatch(/at most \d+ words of this copy may be words the page does not have/);
+    expect(measured).toMatch(/The copy proposed for it adds \d+\./);
+  });
+
+  it("says copy out of proportion to the page is a revise, and what the sizes have to be", () => {
+    expect(prompt).toContain("the copy is out of proportion to the page");
+    expect(prompt).toContain(
+      "A paragraph of the competitor's pricing mechanics on a page whose own paragraphs run to two sentences is a revise",
+    );
+    expect(prompt).toContain("adds at most as many words as the passage it lands in");
+    expect(prompt).toContain(`${MIN_ADDED_WORDS} words always fit`);
+  });
+
+  it("leaves the sizes out when nothing measured them, rather than inventing a page length", () => {
+    expect(prompt).not.toContain("how much it adds:");
   });
 
   it("names the three verdicts and the bar for each", () => {
@@ -205,10 +251,25 @@ describe("buildRewritePrompt", () => {
     const pagePrompt = buildRewritePrompt({ alert, action: pageAction, review, docs });
     expect(pagePrompt).toContain('"proposed_text" is the words that go on the page');
     expect(pagePrompt).toContain("What an update_pages action hands over");
+    expect(pagePrompt).toContain("How much the edit may add");
     expect(pagePrompt).toContain('"edit_kind" is "replace"');
     expect(pagePrompt).toContain("read the excerpt and write in it");
     // A product rewrite is a claim about the product, so it gets the other set.
     expect(prompt).not.toContain('"proposed_text" is the words that go on the page');
+  });
+
+  it("tells a page rewrite how many words it has to come in under", () => {
+    const pagePrompt = buildRewritePrompt({
+      alert,
+      action: pageAction,
+      review,
+      docs,
+      proportions: measureEdits(),
+    });
+
+    expect(pagePrompt).toContain("The length is mechanical too.");
+    expect(pagePrompt).toContain("copy over it is thrown away");
+    expect(pagePrompt).toMatch(/at most \d+ words of this copy may be words the page does not have/);
   });
 
   it("says nothing about the type when the reviewer did not ask for one", () => {

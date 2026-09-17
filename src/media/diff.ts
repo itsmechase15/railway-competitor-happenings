@@ -47,13 +47,12 @@ function counts(word: string): boolean {
 }
 
 /**
- * The longest common subsequence of two word lists, as the moves that turn one
- * into the other. Plain dynamic programming: the lists are a paragraph each.
+ * How long a common subsequence starts at each pair of positions. Plain dynamic
+ * programming: the lists are a paragraph each.
  */
-function commonSubsequence(before: string[], after: string[]): DiffSpan[] {
-  const rows = before.length + 1;
+function lcsTable(before: string[], after: string[]): Uint32Array {
   const columns = after.length + 1;
-  const table = new Uint32Array(rows * columns);
+  const table = new Uint32Array((before.length + 1) * columns);
 
   for (let row = before.length - 1; row >= 0; row -= 1) {
     for (let column = after.length - 1; column >= 0; column -= 1) {
@@ -64,6 +63,17 @@ function commonSubsequence(before: string[], after: string[]): DiffSpan[] {
           : Math.max(table[(row + 1) * columns + column]!, table[here + 1]!);
     }
   }
+
+  return table;
+}
+
+/**
+ * The longest common subsequence of two word lists, as the moves that turn one
+ * into the other.
+ */
+function commonSubsequence(before: string[], after: string[]): DiffSpan[] {
+  const columns = after.length + 1;
+  const table = lcsTable(before, after);
 
   const spans: DiffSpan[] = [];
   let row = 0;
@@ -98,6 +108,53 @@ function push(spans: DiffSpan[], kind: DiffKind, text: string): void {
   else spans.push({ kind, text });
 }
 
+/**
+ * The proposed copy as spans of its own text, each saying whether the page
+ * already had those words.
+ *
+ * The difference from {@link diffWords} is which side survives. A diff draws
+ * both texts, so a removed run is in it and a surviving word is drawn in the
+ * page's own spelling. This draws only the copy that is going on the page:
+ * joining every span back together returns `after` exactly, character for
+ * character, which is what lets the highlight be built out of these.
+ */
+export function afterSpans(before: string, after: string): DiffSpan[] {
+  const from = words(before);
+  const to = words(after);
+
+  if (to.length === 0) return [];
+  if (from.length === 0 || from.length > MAX_WORDS || to.length > MAX_WORDS) {
+    return [{ kind: "added", text: after }];
+  }
+
+  const table = lcsTable(from, to);
+  const columns = to.length + 1;
+  const spans: DiffSpan[] = [];
+  let row = 0;
+  let column = 0;
+
+  while (row < from.length && column < to.length) {
+    if (key(from[row]!) === key(to[column]!)) {
+      // The word survived, drawn as the copy writes it rather than as the page
+      // does: this is the text that is going in.
+      push(spans, "same", to[column]!);
+      row += 1;
+      column += 1;
+    } else if (table[(row + 1) * columns + column]! >= table[row * columns + column + 1]!) {
+      // A word the page loses leaves nothing behind in the copy, so consecutive
+      // surviving runs on either side of it read as one.
+      row += 1;
+    } else {
+      push(spans, "added", to[column]!);
+      column += 1;
+    }
+  }
+
+  for (; column < to.length; column += 1) push(spans, "added", to[column]!);
+
+  return spans;
+}
+
 /** The two texts as one list of spans, in reading order. */
 export function diffWords(before: string, after: string): DiffSpan[] {
   const from = words(before);
@@ -119,19 +176,30 @@ export function diffWords(before: string, after: string): DiffSpan[] {
   return commonSubsequence(from, to);
 }
 
+/** How long a text runs, in the words an edit's size is counted in. */
+export function wordCount(text: string): number {
+  return words(text).filter(counts).length;
+}
+
+/**
+ * How many words one edit puts on the page and takes off it. The size the
+ * caption quotes, and the size the proportion check in
+ * `src/analysis/proportion.ts` judges an edit by, so both read the same number.
+ */
+export function changedWords(spans: DiffSpan[]): { added: number; removed: number } {
+  const counted = (kind: DiffKind): number =>
+    spans.filter((span) => span.kind === kind).reduce((total, span) => total + wordCount(span.text), 0);
+
+  return { added: counted("added"), removed: counted("removed") };
+}
+
 /**
  * What changed, in words, for the line under the image and for anything that
  * cannot show a picture at all. Counted in words rather than characters,
  * because "18 words added" is a size somebody can picture.
  */
 export function diffSummary(spans: DiffSpan[]): string {
-  const counted = (kind: DiffKind): number =>
-    spans
-      .filter((span) => span.kind === kind)
-      .reduce((total, span) => total + words(span.text).filter(counts).length, 0);
-
-  const added = counted("added");
-  const removed = counted("removed");
+  const { added, removed } = changedWords(spans);
   const parts = [
     added > 0 ? `${added} ${added === 1 ? "word" : "words"} added` : null,
     removed > 0 ? `${removed} ${removed === 1 ? "word" : "words"} removed` : null,

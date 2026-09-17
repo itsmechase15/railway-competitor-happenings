@@ -1,6 +1,6 @@
 import type { Browser, Page } from "playwright";
 import type { EditKind } from "../types.js";
-import type { PageEditPlan } from "./page-edit.js";
+import type { CopyRun, PageEditPlan } from "./page-edit.js";
 
 /**
  * The Before/After of a page edit, photographed on the page itself.
@@ -79,7 +79,13 @@ const PASSIVE_RESOURCES = new Set(["image", "font", "stylesheet", "media"]);
 export interface StageInput {
   action: "locate" | "apply" | "restore";
   claim: string;
-  proposedText: string;
+  /**
+   * The copy to stage, paragraph by paragraph, each already split into what the
+   * page does not say today and what it does. Which words those are is decided
+   * in Node by `copyRuns`, against the line being replaced, so the browser only
+   * has to put the marks where it is told.
+   */
+  copy: CopyRun[][];
   editKind: EditKind;
   /**
    * Where the window was scrolled for the Before shot. The After has to be
@@ -226,22 +232,28 @@ function stagePageEdit(input: StageInput): StageOutcome {
     return range;
   }
 
-  /** The proposed copy as the paragraphs it was written as. */
-  function paragraphs(): string[] {
-    return input.proposedText
-      .split(/\n{2,}/)
-      .map((part) => part.trim())
-      .filter((part) => part !== "");
-  }
-
   /**
-   * The new copy, wrapped in a mark a reader cannot miss.
+   * One paragraph of the copy, with the new words marked and the rest left as
+   * the page's own text.
    *
    * The two shots are of the same page at the same offset, so a reader flicking
    * between them sees a paragraph that is a different length and has to read
    * both to find out where. The After says which words are the recommendation
-   * by painting them, and only them: the rest of the paragraph is the page's,
-   * and the Before is never marked at all.
+   * by painting them, and only them. A replacement that keeps a sentence of the
+   * line it replaces leaves that sentence plain, because it is the page's
+   * sentence and marking it would credit the bot with prose it did not write.
+   * The Before is never marked at all.
+   */
+  function stageCopy(runs: CopyRun[]): DocumentFragment {
+    const fragment = document.createDocumentFragment();
+    for (const run of runs) {
+      fragment.append(run.isNew ? highlight(run.text) : document.createTextNode(run.text));
+    }
+    return fragment;
+  }
+
+  /**
+   * A run of new copy, wrapped in a mark a reader cannot miss.
    *
    * Written as inline `!important` declarations rather than a class or a bare
    * `<mark>`, because a docs site styles `mark` for its own callouts and a
@@ -277,12 +289,12 @@ function stagePageEdit(input: StageInput): StageOutcome {
    * new copy next to it. Extra paragraphs are shallow clones of the element
    * they follow, so they inherit the page's own styling for a paragraph.
    *
-   * Every paragraph of the copy goes in highlighted, and nothing else is
-   * touched, so what is painted on the After shot is exactly what the issue
-   * asks somebody to write.
+   * Every paragraph of the copy goes in with its new words marked, and nothing
+   * else is touched, so what is painted on the After shot is exactly what the
+   * edit adds.
    */
   function applyEdit(element: HTMLElement): boolean {
-    const copy = paragraphs();
+    const copy = input.copy;
     if (copy.length === 0) return false;
 
     store.__happeningsOriginal = element.innerHTML;
@@ -293,13 +305,13 @@ function stagePageEdit(input: StageInput): StageOutcome {
       const range = rangeFor(element);
       if (!range) return false;
       range.deleteContents();
-      range.insertNode(highlight(copy[0]!));
+      range.insertNode(stageCopy(copy[0]!));
       rest = copy.slice(1);
     }
 
     for (const extra of rest) {
       const sibling = element.cloneNode(false) as HTMLElement;
-      sibling.append(highlight(extra));
+      sibling.append(stageCopy(extra));
       sibling.setAttribute(INSERTED, "");
       anchor.after(sibling);
       anchor = sibling;
@@ -539,6 +551,6 @@ export async function captureEdit(
 }
 
 /** The three things the browser side needs off a plan. */
-function edit(plan: PageEditPlan): Pick<StageInput, "claim" | "proposedText" | "editKind"> {
-  return { claim: plan.claim, proposedText: plan.proposedText, editKind: plan.editKind };
+export function edit(plan: PageEditPlan): Pick<StageInput, "claim" | "copy" | "editKind"> {
+  return { claim: plan.claim, copy: plan.copy, editKind: plan.editKind };
 }

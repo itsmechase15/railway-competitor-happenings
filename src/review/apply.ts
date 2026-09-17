@@ -1,6 +1,7 @@
 import { checkAction } from "../analysis/analyze.js";
 import { gapQuery, type CoverageContext } from "../analysis/evidence.js";
 import { evidenceFor, renderNoAction, withNoAction } from "../analysis/noAction.js";
+import { measureEdit } from "../analysis/proportion.js";
 import type { Config } from "../config.js";
 import {
   buildIssueBody,
@@ -28,6 +29,7 @@ import type {
   RecommendedAction,
 } from "../types.js";
 import { SPACED_EN_DASH } from "../util/text.js";
+import type { EditProportions } from "./prompt.js";
 import type { Reviewer, ReviewOutcome } from "./reviewer.js";
 import { mergeRevision } from "./schema.js";
 import type { ActionWriter } from "./writer.js";
@@ -187,6 +189,7 @@ async function reviewOne(
   }
 
   const alert: AnalyzedItem = { ...input.alert, analysis };
+  const proportions = measureEdits(analysis.railwayRefs, input.index);
   let outcome: ReviewOutcome;
   try {
     input.budget.remaining -= 1;
@@ -195,6 +198,7 @@ async function reviewOne(
       action: target.action,
       workspace: input.workspace,
       docs: alert.docs ?? [],
+      proportions,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -248,7 +252,22 @@ async function reviewOne(
     return { analysis, dropped: { reason: outcome.reason, pages } };
   }
 
-  return revise(input, target, alert, outcome, review, notes);
+  return revise(input, target, alert, outcome, review, notes, proportions);
+}
+
+/**
+ * How long each page an action would edit runs, against how much its copy
+ * adds. Both models are shown this, because proportion is what neither of them
+ * can count off an excerpt, and the gate drops an edit that is over.
+ */
+function measureEdits(refs: RailwayRef[], index: CorpusIndex): EditProportions {
+  const measured: EditProportions = new Map();
+  for (const ref of refs) {
+    if (!isMarketingTarget(ref.url)) continue;
+    const proportion = measureEdit(ref, index.page(ref.url)?.text);
+    if (proportion) measured.set(ref.url, proportion);
+  }
+  return measured;
 }
 
 /**
@@ -267,6 +286,7 @@ async function revise(
   outcome: ReviewOutcome,
   review: ActionReview,
   notes: string[],
+  proportions: EditProportions,
 ): Promise<OneOutcome> {
   const unconfirmed = async (why: string): Promise<OneOutcome> => {
     notes.push(`review: could not confirm a rewrite of the ${target.action.type} action (${why})`);
@@ -301,6 +321,7 @@ async function revise(
       action: target.action,
       review: outcome,
       docs,
+      proportions,
     });
     merged = mergeRevision(
       target.action,

@@ -8,8 +8,8 @@ import {
   type StageInput,
   type StageOutcome,
 } from "../src/media/live-page.js";
-import { planPageEdit } from "../src/media/page-edit.js";
-import type { RailwayRef } from "../src/types.js";
+import { copyRuns, planPageEdit } from "../src/media/page-edit.js";
+import type { EditKind, RailwayRef } from "../src/types.js";
 
 /**
  * The browser half of the Before/After, run against fixtures that look like the
@@ -23,8 +23,20 @@ const browser: Browser | null = await chromium.launch().catch(() => null);
 const withBrowser = browser ? describe : describe.skip;
 
 const CLAIM = "Render keeps a web service running until you scale it down yourself.";
+
+/** Copy that replaces the line outright, so every word of it is new to the page. */
 const PROPOSED =
-  "Render now bills a web service per request once it goes idle, so a quiet service costs close to nothing between requests.";
+  "Idle Render containers now cost nothing between requests, and each invocation is metered on its own.";
+
+/** The sentence a replacement that keeps the line it replaces goes on to add. */
+const ADDED =
+  "Bandwidth is the exception: an idle web service is billed per request, so a quiet one costs close to nothing.";
+
+/**
+ * The shape a page edit usually has, and the one that used to paint the page's
+ * own prose: the line the page has today, kept, with a sentence added after it.
+ */
+const GROWN = `${CLAIM} ${ADDED}`;
 
 /** The shape of the page: a nav, a sidebar, and prose with links and code in it. */
 const DOCS_PAGE = `<!doctype html>
@@ -53,15 +65,32 @@ const ref = (overrides: Partial<RailwayRef> = {}): RailwayRef => ({
   ...overrides,
 });
 
-const input = (overrides: Partial<StageInput> = {}): StageInput => ({
-  action: "locate",
-  claim: CLAIM,
-  proposedText: PROPOSED,
-  editKind: "replace",
-  ...overrides,
-});
+/**
+ * One staged edit, with the copy split into new and retained words by the same
+ * function a morning run splits it with. The browser is handed runs rather than
+ * a string, so a test that built them itself would be testing its own diff.
+ */
+interface StageOverrides {
+  action?: StageInput["action"];
+  claim?: string;
+  proposedText?: string;
+  editKind?: EditKind;
+  scrollY?: number;
+}
 
-const stage = (page: Page, overrides: Partial<StageInput> = {}): Promise<StageOutcome> =>
+const input = (overrides: StageOverrides = {}): StageInput => {
+  const claim = overrides.claim ?? CLAIM;
+  const editKind = overrides.editKind ?? "replace";
+  return {
+    action: overrides.action ?? "locate",
+    claim,
+    copy: copyRuns(claim, overrides.proposedText ?? PROPOSED, editKind),
+    editKind,
+    ...(overrides.scrollY === undefined ? {} : { scrollY: overrides.scrollY }),
+  };
+};
+
+const stage = (page: Page, overrides: StageOverrides = {}): Promise<StageOutcome> =>
   page.evaluate<StageOutcome>(stageExpression(input(overrides)));
 
 /** The colour the After shot paints the recommended copy, as `live-page.ts` sets it. */
@@ -201,6 +230,44 @@ withBrowser("finding the line on the live page and putting the copy in", () => {
         .locator("#target")
         .evaluate((node) => node.querySelector("a")?.closest("[data-happenings-highlight]")),
     ).toBeNull();
+  });
+
+  it("paints only what the edit adds, and leaves the sentence it kept plain", async () => {
+    await load();
+    await stage(page, { proposedText: GROWN });
+    await stage(page, { action: "apply", proposedText: GROWN });
+
+    // The whole of the copy goes on the page, and only the new sentence of it
+    // is painted: the other one is the page's own, kept by the replacement.
+    expect(await targetText()).toContain(GROWN);
+    expect(await highlights().count()).toBe(1);
+    expect(await highlights().innerText()).toBe(ADDED);
+    expect(await highlights().innerText()).not.toContain("keeps a web service running");
+    expect(
+      await page.locator("#target").evaluate((node) => {
+        const marked = Array.from(node.querySelectorAll("[data-happenings-highlight]"))
+          .map((mark) => mark.textContent ?? "")
+          .join(" ");
+        return marked.includes("scale it down yourself");
+      }),
+    ).toBe(false);
+  });
+
+  it("closes the highlight over a word or two the old line happened to share", async () => {
+    await load();
+    // "a web service" and "it" are in the line being replaced and in the new
+    // sentence. A couple of shared words are not wording anybody recognizes as
+    // the page's, so the mark runs through them rather than breaking into
+    // three. The word the new sentence opens on is where the page's prose
+    // picks up, so that one stays plain.
+    const reworded = "Render bills a web service per request once it goes idle.";
+    await stage(page, { proposedText: reworded });
+    await stage(page, { action: "apply", proposedText: reworded });
+
+    expect(await highlights().count()).toBe(1);
+    expect(await highlights().innerText()).toBe(
+      "bills a web service per request once it goes idle.",
+    );
   });
 
   it("leaves the before unmarked, so only the second shot points at anything", async () => {

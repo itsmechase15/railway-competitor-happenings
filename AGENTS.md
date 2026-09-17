@@ -47,9 +47,20 @@ which is what you want on a box with no Chromium: run
   is what an action is judged against, so asking for one to be edited is turning
   the evidence into the job.
 - **A page edit ships the copy.** `proposed_text` is the words for the page, not
-  a note about them. `PAGE_REWRITE_RULES` in
-  [`src/analysis/prompt.ts`](./src/analysis/prompt.ts) states it and `copyFault`
-  enforces it, for the analyst and for the review's writer alike.
+ a note about them. `PAGE_REWRITE_RULES` in
+ [`src/analysis/prompt.ts`](./src/analysis/prompt.ts) states it and `copyFault`
+ enforces it, for the analyst and for the review's writer alike.
+- **A page edit is the size of the thing it fixes.** A page could nearly always
+ carry more about a competitor, and that is not a reason to put it there: the
+ copy may add at most as many words as the passage it lands in already runs to,
+ never more than a fifth of the page, and 45 words always fit.
+ [`src/analysis/proportion.ts`](./src/analysis/proportion.ts) measures it
+ against the stored page and the gate drops what is over, with the numbers in
+ the open question. Nothing shortens the copy, because shortening copy is
+ writing it: the analyst is told the rule and the review pass is given the
+ measured sizes, so a shorter edit is one a model wrote rather than one this
+ inferred. Do not raise the allowance to let a good paragraph through – the
+ paragraph is the failure.
 - **Do not add a guess-then-fix model pass.** A model shown its own unsupported
   claim argues for it better rather than going to check. One analyst run, with
   the corpus under it, then code.
@@ -84,9 +95,14 @@ which is what you want on a box with no Chromium: run
  [`src/media/live-page.ts`](./src/media/live-page.ts): open the page in a
  headless browser, shoot it, put the copy into that tab's own DOM, shoot it
  again, throw the tab away. Nothing is submitted anywhere and the After's
- caption says so. The copy that went in is highlighted on the After and only
- there, so a reader spots the edit in a thumbnail; the Before is never marked,
- and nothing the page already said is either. This replaced a card drawn from
+ caption says so. What the edit **adds** is highlighted on the After and only
+ there, so a reader spots it in a thumbnail; the Before is never marked, and
+ nothing the page already said is either. That last part is `copyRuns` in
+ [`src/media/page-edit.ts`](./src/media/page-edit.ts), which splits the copy
+ against the line being replaced before the browser sees it, so a replacement
+ that keeps a sentence of that line leaves it plain. Wrapping the whole of
+ `proposed_text` in one mark is the bug that fixed, not a simplification worth
+ going back to. This replaced a card drawn from
  the corpus text, which read as a text mock of a page rather than the page – do not bring it back, as a
  fallback or otherwise (Chase asked for the real UI, in so many words). The
  corpus is still what the claim is *checked* against, and a claim the live page

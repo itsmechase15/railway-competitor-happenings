@@ -9,9 +9,10 @@ import {
   type ArtifactWriter,
 } from "../src/github/artifact.js";
 import { buildIssueBody, buildIssueDrafts } from "../src/github/issue.js";
-import { diffSummary, diffWords, words } from "../src/media/diff.js";
+import { afterSpans, diffSummary, diffWords, words } from "../src/media/diff.js";
 import type { CaptureResult } from "../src/media/live-page.js";
 import {
+  copyRuns,
   looseSpan,
   paragraphWith,
   planPageEdit,
@@ -97,6 +98,72 @@ describe("the word diff a before/after is measured with", () => {
     const long = Array.from({ length: 700 }, (_, index) => `word${index}`).join(" ");
     const spans = diffWords(long, "something much shorter");
     expect(spans.map((span) => span.kind)).toEqual(["removed", "added"]);
+  });
+});
+
+/**
+ * The After shot paints the edit and nothing else, and what makes that hard is
+ * that most replacements keep some of the line they replace. Marking the whole
+ * of the proposed copy credited the bot with the page's own sentences, which is
+ * what a reader glancing at a thumbnail reads off it.
+ */
+describe("which words of the copy are new to the page", () => {
+  /** The shape a page edit usually has: the line today, kept, with a sentence added. */
+  const ADDED = "Bandwidth is the exception, where a flat rate covers requests and transfer.";
+  const GROWN = `${CLAIM} ${ADDED}`;
+
+  const runs = (proposed: string, editKind: "replace" | "insert" = "replace") =>
+    copyRuns(CLAIM, proposed, editKind)[0]!;
+
+  const painted = (proposed: string, editKind: "replace" | "insert" = "replace") =>
+    runs(proposed, editKind)
+      .filter((run) => run.isNew)
+      .map((run) => run.text);
+
+  it("puts every word of the copy in a run, so the page gets the copy as written", () => {
+    expect(runs(GROWN).map((run) => run.text).join("")).toBe(GROWN);
+    expect(afterSpans(CLAIM, GROWN).map((span) => span.text).join("")).toBe(GROWN);
+  });
+
+  it("leaves the sentence the copy kept from the page unpainted", () => {
+    expect(painted(GROWN)).toEqual([ADDED]);
+    expect(runs(GROWN)[0]).toMatchObject({ isNew: false });
+    expect(runs(GROWN)[0]?.text).toContain("keeps a web service running");
+  });
+
+  it("paints a replacement that keeps nothing of the old line, which is all of it", () => {
+    const outright =
+      "Idle containers now cost nothing between requests, and each invocation is metered on its own.";
+    expect(painted(outright)).toEqual([outright]);
+  });
+
+  it("closes over a word or two the copy shares, and leaves the word it opens on plain", () => {
+    // "a web service" and "it" are in both lines, and painting around each of
+    // them would break one new sentence into three marks. The word the copy
+    // opens on is where the page's prose runs into the edit, so it stays plain.
+    const reworded = "Render bills a web service per request once it goes idle.";
+    expect(painted(reworded)).toEqual(["bills a web service per request once it goes idle."]);
+  });
+
+  it("paints an insert in full, because an insert takes nothing off the page", () => {
+    expect(painted(CLAIM, "insert")).toEqual([CLAIM]);
+  });
+
+  it("paints every paragraph after the first in full, because each is a new block", () => {
+    const second = "Railway caches a response at the edge on every plan.";
+    const [first, next] = copyRuns(CLAIM, `${GROWN}\n\n${CLAIM} ${second}`, "replace");
+    expect(first?.filter((run) => run.isNew).map((run) => run.text)).toEqual([ADDED]);
+    expect(next?.every((run) => run.isNew)).toBe(true);
+  });
+
+  it("keeps the space around a run outside the mark, so no highlight trails off a sentence", () => {
+    for (const run of runs(GROWN).filter((entry) => entry.isNew)) {
+      expect(run.text).toBe(run.text.trim());
+    }
+  });
+
+  it("carries the runs on the plan, so the browser is told rather than asked to work it out", () => {
+    expect(plan({ proposedText: GROWN }).copy).toEqual(copyRuns(CLAIM, GROWN, "replace"));
   });
 });
 

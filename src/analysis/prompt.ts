@@ -5,6 +5,8 @@ import { MAX_ACTION_CHARS } from "../discord/embed.js";
 import { COMPARE_AND_MIGRATE_PATHS } from "../railway/pages.js";
 import { RAILWAY_ABOUT_URL, RAILWAY_TEAMS } from "../railway/teams.js";
 import { EVIDENCE_LABEL, TOC_FILENAME } from "../railway/workspace.js";
+// The size an edit is held to is the gate's own, so the rule is stated once.
+import { MIN_ADDED_WORDS } from "./proportion.js";
 // The cap on how many teams an action may name is the one the issue labels
 // render to, so it is stated once, where the routing lives.
 import { MAX_TEAMS } from "../teams.js";
@@ -152,6 +154,18 @@ const TEAM_RULES = `- "teams" is 1 to ${MAX_TEAMS} Railway teams the action is f
 - Pick by who builds the work. A team that owns the surface the action is about is the answer: a CDN or networking gap is for Infrastructure Engineering, a usage limit or cost control change is for Product Engineering, an MCP or coding-agent launch is for Agentic Experience, a compare or migrate page edit is for Marketing, a tutorial or template is for Developer Relations, and a competitor's migration tooling is for Solutions Engineering.
 - Two or three teams only when the work genuinely splits: the team that owns the surface plus the team that owns the plumbing under it, or Marketing plus whoever builds the thing a page is wrong about. One team is the normal answer, and a shorter list routes better than a long one.`;
 
+/**
+ * How long a page edit is allowed to be, in the words the analyst and the
+ * review's writer are both told. The numbers are the gate's own, read off
+ * `src/analysis/proportion.ts`, so the rule a model is given is the rule its
+ * copy is measured against rather than a paraphrase of it.
+ */
+export const PAGE_SIZE_RULES = `How much the edit may add. What you add has to be in proportion to the page it goes on. A page could nearly always carry more about a competitor; that is not a reason to put it there, and it is the way this action goes wrong:
+- Count the words. The copy may add at most as many words as the passage it lands in already runs to, and never more than a fifth of the whole page. Code measures this against the stored page and drops the action when the copy is over, so an edit worth filing is one that fits.
+- Whatever those numbers come to, ${MIN_ADDED_WORDS} words of new copy always fit. A short page ${EN_DASH} two or three paragraphs ${EN_DASH} gets a clause or a sentence, not a paragraph of somebody else's launch.
+- Add what the page is wrong about and stop. The mechanics behind it, the competitor's tiers, what each tier bundles, what it costs per GB: none of that belongs on a Railway page unless the page is wrong without it. If a detail could come out and the page would still be correct about this launch, leave it out.
+- A long rewrite is the signal to write a shorter one. If what the page needs cannot be said inside that budget, the honest answer is no update_pages action at all, and one open question saying what the page does not cover.`;
+
 export const PAGE_REWRITE_RULES = `What an update_pages action hands over. The edit is finished copy, not a note asking somebody to write it. Nobody who picks this up should have to word anything themselves:
 1. Open that page's own file in the workspace and read all of it. The excerpts below are a paragraph or two, and you cannot write in a page's voice from a paragraph of it.
 2. Quote what the page says today into "claim", word for word. That line is where the edit lands, and it is checked against the stored page.
@@ -161,6 +175,9 @@ export const PAGE_REWRITE_RULES = `What an update_pages action hands over. The e
 
 Write "proposed_text" in the page's voice rather than your own. Match what you read on it: how long its sentences run, whether it makes its case in paragraphs, table rows, or bullets, what it calls Railway and what it calls the competitor, whether it addresses the reader as "you", how it heads a section. A replacement for a table row is a table row with the same columns. A replacement for a one-line bullet is a one-line bullet. The bar is that a reader cannot tell which sentence on the page is yours.
 Leave nothing for anyone to fill in: no placeholders, no square brackets, no "add something about X", and no number you did not read off a page in front of you.
+
+${PAGE_SIZE_RULES}
+
 The writing rules below apply to this copy too. Where the page's own rhythm and vocabulary differ from how you would put it, the page wins.`;
 
 export const SYSTEM_RULES = `You are a competitive-intelligence analyst for Railway, a platform that deploys and runs applications, databases, and infrastructure.
@@ -219,7 +236,8 @@ Every update_pages action has to be about the competitor product update in this 
   The claim you put in "railway_refs" is quoted from the page as it stands, and it is checked against the stored copy. A page that no longer says the thing you are correcting has already been fixed.
   Small launches often need no page edit at all. Where no Railway page in context discusses this launch's capability, the right answer is no update_pages and, if it matters, one open question.
   A notable or major impact is not a reason for update_pages. Plenty of real launches are consider_enhancing or consider_building only, and an alert with one honest action beats one with a page edit added to fill the line.
-Do not recommend update_pages because customers might ask about the launch, because a page could mention the news, because a feature matrix has no row for it, or because a page "could be stronger". Those are not page errors. Point at the specific page and the specific line in "railway_refs", and name that page in the opening sentence of "detail" as well, because that sentence is all the embed shows.
+Do not recommend update_pages because customers might ask about the launch, because a page could mention the news, because a feature matrix has no row for it, or because a page "could be stronger". Those are not page errors.
+Then judge the edit itself, which is a second decision and not a formality. A page that could carry more is not a page that should: ask what the shortest edit is that makes the page correct about this launch, whether every sentence of yours is needed for that, and whether the page reads as Railway's after it. If the answer is a paragraph of the competitor's mechanics on a page whose own paragraphs run to two sentences, the recommendation is wrong however true it is, and either the shorter version or no page action is the right answer. The size rules below are where that is spelled out, and code holds you to them. Point at the specific page and the specific line in "railway_refs", and name that page in the opening sentence of "detail" as well, because that sentence is all the embed shows.
 A Railway product docs page is evidence for what Railway ships, never a page to edit. The only pages update_pages may target are:
 ${EDITABLE_PAGES}
   A page edit on any other docs.railway.com URL is always the wrong answer.

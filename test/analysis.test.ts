@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { enforceActionLead } from "../src/analysis/lead.js";
 import { enforceUpdatePagesTopic } from "../src/analysis/relevance.js";
 import { UNSTATED_NO_ACTION_REASON } from "../src/analysis/noAction.js";
+import { buildAnalysisPrompt } from "../src/analysis/prompt.js";
+import { MIN_ADDED_WORDS } from "../src/analysis/proportion.js";
 import {
   extractJsonObject,
   parseAnalysis,
@@ -364,6 +366,35 @@ describe("checking a verdict against the docs", () => {
     const verdict = analysis();
     const { notes } = verifyAgainstDocs(verdict, []);
     expect(notes).toEqual([]);
+  });
+});
+
+/**
+ * A page that could carry more about a competitor is not a page that should,
+ * and the analyst is the only reader with the page and the launch both in
+ * front of it. So the rule it writes under says the size the gate measures.
+ */
+describe("what the analyst is told about the size of a page edit", () => {
+  const prompt = buildAnalysisPrompt(storedItem());
+
+  it("asks for the shortest edit that makes the page correct, and says so as a judgment", () => {
+    expect(prompt).toContain("A page that could carry more is not a page that should");
+    expect(prompt).toContain("ask what the shortest edit is that makes the page correct");
+    expect(prompt).toContain("either the shorter version or no page action is the right answer");
+  });
+
+  it("states the sizes the copy is measured against, which is what code enforces", () => {
+    expect(prompt).toContain("How much the edit may add");
+    expect(prompt).toContain(
+      "The copy may add at most as many words as the passage it lands in already runs to, and never more than a fifth of the whole page",
+    );
+    expect(prompt).toContain(`${MIN_ADDED_WORDS} words of new copy always fit`);
+    expect(prompt).toContain("drops the action when the copy is over");
+  });
+
+  it("says a long rewrite means writing a shorter one or nothing at all", () => {
+    expect(prompt).toContain("A long rewrite is the signal to write a shorter one");
+    expect(prompt).toContain("the honest answer is no update_pages action at all");
   });
 });
 
