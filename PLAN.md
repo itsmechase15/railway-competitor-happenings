@@ -478,12 +478,13 @@ of the edit, and the day: a re-run the same morning reuses the pair, a run next
 week photographs the page as it is then, and a rewrite gets its own pair. If
 one of the two will not commit, both are dropped.
 
-This repo is private, and that decides the URL the issue embeds. It is
-`github.com/<repo>/blob/<commit sha>/<path>?raw=true`, an address the reader's
-own browser authenticates with the github.com session it already has: GitHub
-serves its own URLs directly rather than through the camo image proxy, which
-fetches anonymously and so could never read a private repo, and a commit SHA
-never moves. What the issue must never embed is the contents API's
+This repo is public, so anybody who opens the issue can see the pictures,
+signed in or not. What the URL still has to do is outlive the run that wrote
+it, which is why it is `github.com/<repo>/blob/<commit sha>/<path>?raw=true`: a
+commit SHA never moves, and neither does a blob at one, so an open issue keeps
+pointing at the pair that was taken for it. An unsigned
+`raw.githubusercontent.com` address at the same SHA does the same job. What the
+issue must never embed is the contents API's
 `download_url`, a `raw.githubusercontent.com` URL carrying a signed token that
 lasts minutes – it renders while the run is still going and 404s for the person
 who opens the issue tomorrow. Code refuses any URL with a credential in its

@@ -380,8 +380,8 @@ describe("committing the pictures so an issue can render them", () => {
   const blob = `https://github.com/o/r/blob/${sha}/${path}?raw=true`;
 
   /**
-   * What the contents API actually hands back for a private repo: a raw URL
-   * signed with a token that lasts minutes. Nothing may put this in an issue.
+   * What the contents API actually hands back: a raw URL signed with a token
+   * that lasts minutes. Nothing may put this in an issue.
    */
   const signedRawUrl = `https://raw.githubusercontent.com/o/r/main/${path}?token=AJ7VCKEXPIRESSOON`;
 
