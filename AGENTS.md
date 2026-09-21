@@ -84,6 +84,29 @@ which is what you want on a box with no Chromium: run
  nothing specific to say: `test/no-action.test.ts` greps `src/` for the
  platitudes this replaced and fails on a hit. Writing one means naming the
  capability and the page, or picking the kind that admits it does not know.
+- **An open question is a question.** Every line under Open questions ends on
+ one, because the heading promises one and "Whether the new tier is on every
+ plan" is that thought with the asking taken out of it.
+ [`src/analysis/questions.ts`](./src/analysis/questions.ts) holds the shape and
+ never the substance: a `whether` clause gets the stem it is missing, a hedge in
+ front of one is dropped, a line that already opens interrogatively gets its
+ question mark, and anything else is dropped rather than rewritten, because
+ deciding what a statement was asking is writing the question. The lines this
+ bot writes itself – the gate's dropped action, an unconfirmed gap, a run with
+ no model – are written as questions where they are written, not repaired after
+ the fact.
+- **An issue reads news, detail, ask, then everything that justifies the ask.**
+ What you need to know, More detail, Recommended action, and only then the gap,
+ the teams, the impact scale, the pages, the open questions, and the sources. A
+ reader who has not understood the launch cannot judge the recommendation, which
+ is why the bullets sit above it and why the Discord embed reads the same way.
+- **An empty list of cited pages is an answer, not a failed lookup.** "Railway
+ docs this was checked against" holds the pages the recommendation was read
+ against, and on a `consider_building` action it is usually empty: Railway has
+ not written about a capability Railway does not ship. The copy there says that,
+ and it is a different section from "Docs that would change if this ships",
+ which is the work the day Railway does ship it. Do not word either of them so
+ it reads as a search that fell over.
 - **A morning with nothing in it is posted, not skipped.** A daily run that
  read the sources and found nothing new posts one plain line, because silence
  and a broken job read identically in a channel. It is held back by three

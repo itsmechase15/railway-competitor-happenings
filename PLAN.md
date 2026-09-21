@@ -403,15 +403,29 @@ embed so every action has a link. An alert with no surviving action opens
 nothing. Title `Competitor: feature – Action`.
 
 The body reads in the order a reader needs it. Metadata line and image, then
-**what you need to know**, then the **recommended action**, then the teams it is
-for. Somebody who reads that far and closes the tab has the whole point of the
-issue. Everything that justifies the action comes after all three: the gap it
-closes with the docs page it was read off and the line quoted from it, the whole
-impact scale with this level checked, the detail bullets, the cited pages, open
-questions, and sources. Product issues cite the docs that back the action and
-end with the docs that would change if Railway ships it. Marketing issues carry
-url + copy today + what the edit does + the copy to paste, in a code block,
-labeled as a replacement for the quoted line or as an insert next to it.
+**what you need to know**, then **more detail**, then the **recommended
+action**. Somebody who reads that far and closes the tab has the whole point of
+the issue, and the bullets sit above the ask because a reader who has not
+understood the launch cannot judge the recommendation. Everything that justifies
+it comes after all three: the gap it closes with the docs page it was read off
+and the line quoted from it, the teams it is for, the whole impact scale with
+this level checked, the cited pages, open questions, and sources.
+
+Product issues list the docs the action was **checked against** and end with the
+docs that would change if Railway ships it. Those two are different lists and
+the headings say so. The first is empty on most `consider_building` actions,
+because Railway has not written about a capability Railway does not ship, and
+the line there says that rather than reading as a lookup that fell over.
+Marketing issues carry url + copy today + what the edit does + the copy to
+paste, in a code block, labeled as a replacement for the quoted line or as an
+insert next to it.
+
+Every line under **open questions** is a question: it ends in a question mark
+and it opens the way a question opens. `src/analysis/questions.ts` repairs the
+forms that are a question with a word missing – a bare `whether` clause, a
+hedge in front of one, a line that asks and forgets its punctuation – and drops
+what it would have to write itself, because deciding what a statement was asking
+is writing the question rather than checking it.
 
 Labels: `competitor-happenings`, `render|vercel`, `source:<label>`,
 `impact:<level>`, `action:<action>`, `owner:product|marketing`, one to three

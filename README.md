@@ -55,7 +55,9 @@ the page has to be product documentation rather than marketing copy or a
 changelog entry, and the quote has to be on the stored copy of it. Then the
 corpus is searched again with the gap's own words, and an action is dropped
 when the docs answer it on a page the analysis never opened. Anything that
-fails becomes an open question instead of an issue.
+fails becomes an open question instead of an issue, written as a question: the
+heading says open questions, so "Whether the new tier is on every plan" is
+repaired into the question it nearly was or dropped, never filed as a note.
 
 A page edit carries the same weight in a different currency. When the bot says
 a compare, migrate, pricing, or features page is now wrong, it reads that page,
