@@ -296,8 +296,8 @@ describe("the team on an issue", () => {
 });
 /**
  * Chase reads the issue top down and stops when he has the point: what
- * happened, then what to do about it. Everything that justifies the action
- * comes after both.
+ * happened, the rest of what happened, then what to do about it. Everything
+ * that justifies the action comes after all three.
  */
 describe("the order an issue reads in", () => {
   const cdnAction: RecommendedAction = {
@@ -322,11 +322,11 @@ describe("the order an issue reads in", () => {
       .filter((line) => line.startsWith("## "))
       .map((line) => line.slice(3));
 
-  it("leads with what you need to know, then the action, then the teams", () => {
+  it("leads with the news, then the rest of the news, then the ask", () => {
     expect(headingOrder(body()).slice(0, 3)).toEqual([
       "What you need to know",
+      "More detail",
       "Recommended action",
-      "Related team(s)",
     ]);
   });
 
@@ -338,16 +338,16 @@ describe("the order an issue reads in", () => {
     expect(text.indexOf("<img src=")).toBeLessThan(text.indexOf("## What you need to know"));
   });
 
-  it("puts the evidence, the impact, and the detail after the action", () => {
+  it("puts the evidence, the teams, and the impact after the action", () => {
     const headings = headingOrder(body());
     expect(headings).toEqual([
       "What you need to know",
-      "Recommended action",
-      "Related team(s)",
-      "The gap this closes",
-      "Impact",
       "More detail",
-      "Railway docs for context",
+      "Recommended action",
+      "The gap this closes",
+      "Related team(s)",
+      "Impact",
+      "Railway docs this was checked against",
       "Open questions",
       "Sources",
     ]);

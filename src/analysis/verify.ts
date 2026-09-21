@@ -76,7 +76,7 @@ export function verifyAgainstDocs(analysis: Analysis, docs: RailwayDoc[]): DocsV
       } else if (openQuestions.length < 3) {
         notes.push("flagged an unverified gap claim as an open question");
         openQuestions.push(
-          `This action says what Railway does not do, and no Railway docs page in context confirmed it. Check the docs for ${namedProducts(action) || "the surface involved"} before acting on it.`,
+          `This action says what Railway does not do, and no Railway docs page in context confirmed it. What do the docs for ${namedProducts(action) || "the surface involved"} say before anybody acts on it?`,
         );
       }
     }

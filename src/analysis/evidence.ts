@@ -532,7 +532,7 @@ export function gateActions(analysis: Analysis, context: CoverageContext): GateR
   if (kept.length > 0) {
     for (const entry of blocked) {
       if (openQuestions.length >= 4) break;
-      openQuestions.push(entry.reason);
+      openQuestions.push(blockedQuestion(entry));
     }
   }
 
@@ -594,6 +594,16 @@ export function gateActions(analysis: Analysis, context: CoverageContext): GateR
 
     return null;
   }
+}
+
+/**
+ * A blocked action as the question it leaves behind: what was recommended,
+ * what stopped it, and the thing a person still has to settle. The check's own
+ * sentence is a statement about this run, and the open question it becomes is
+ * a question, because that is what the heading over it says.
+ */
+function blockedQuestion(entry: BlockedAction): string {
+  return `"${firstSentence(entry.action.detail, 120)}" was dropped because ${entry.reason}. Does it hold when somebody reads those pages by hand?`;
 }
 
 /** The kind of verdict one blocked action argues for. */

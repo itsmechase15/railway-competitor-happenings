@@ -1,3 +1,4 @@
+import { toOpenQuestions } from "../analysis/questions.js";
 import { relevantDocs } from "../analysis/verify.js";
 import { COMPETITORS, type Config } from "../config.js";
 import { actionLabel, actionOwner, IMPACT_LABEL, IMPACT_MEANING, SOURCE_LABEL } from "../labels.js";
@@ -222,9 +223,35 @@ function pageEdit(ref: RailwayRef, visual: PageVisual | undefined): string {
 }
 
 /**
+ * What an empty list of cited pages means, which is not that a lookup fell
+ * over.
+ *
+ * On a `consider_building` or a `consider_enhancing` action, no Railway page
+ * covering the capability is the ordinary case and it is close to the point of
+ * the issue: Railway does not ship this, so Railway has not written about it.
+ * The old line here read as a search that came back empty and left a reader
+ * wondering whether the run was broken. The gap's own evidence page is a
+ * separate thing and it is quoted above, so this says where that is rather
+ * than repeating it.
+ */
+function noCitedPages(action: RecommendedAction): string {
+  if (isPageAction(action)) {
+    return "No indexed Railway compare, migrate, pricing, or features page says anything about this launch, so there is no page here to paste copy onto. A page with nothing on the topic is itself worth a look.";
+  }
+  const evidence = action.gap
+    ? ' The page the gap was read off is quoted under "The gap this closes" above.'
+    : "";
+  return `Railway's docs have no page on this capability, which is what the action says rather than a search that came back empty.${evidence}`;
+}
+
+/**
  * The cited pages. Marketing gets the pages to edit with the copy to paste,
  * because editing the page is the job; product gets the docs that speak to the
  * action it is being asked to take, and nothing else.
+ *
+ * The heading says these pages were read against the action, which is the
+ * thing that separates them from the docs listed further down: those are the
+ * pages somebody rewrites the day Railway ships this.
  */
 function pagesSection(
   alert: AnalyzedItem,
@@ -233,15 +260,10 @@ function pagesSection(
 ): string {
   const heading = isPageAction(action)
     ? "## Railway pages to update"
-    : "## Railway docs for context";
+    : "## Railway docs this was checked against";
   const refs = supportingRefs(alert, action);
 
-  if (refs.length === 0) {
-    const empty = isPageAction(action)
-      ? "No indexed Railway compare or migrate page covers this yet, which is itself worth a look."
-      : "No Railway docs page in context speaks to this action, so nothing here has been checked against what Railway ships.";
-    return `${heading}\n_${empty}_`;
-  }
+  if (refs.length === 0) return `${heading}\n_${noCitedPages(action)}_`;
 
   if (isPageAction(action)) {
     const note =
@@ -346,11 +368,14 @@ function bullets(values: string[], empty: string): string {
  * the full detail, page citations, suggested edits, open questions – lives
  * here, scoped to the one job this issue is asking for.
  *
- * The order is what a reader needs in the order they need it: what happened,
- * then what to do about it, then who it is for. Somebody who reads that far and
- * closes the tab has the whole point of the issue, so everything that justifies
- * the action – the gap, the impact scale, the cited pages – comes after all
- * three rather than between them.
+ * The order is what a reader needs in the order they need it: the news in one
+ * sentence, the rest of the news in bullets, then what to do about it.
+ * Somebody who reads that far and closes the tab has the whole point of the
+ * issue, so everything that justifies the ask – the gap, the teams, the impact
+ * scale, the cited pages – comes after all three rather than between them. The
+ * detail sits above the action rather than below it because a reader who has
+ * not understood the launch cannot judge the recommendation, and it is the
+ * order the Discord embed already reads in.
  */
 export function buildIssueBody(
   alert: AnalyzedItem,
@@ -366,14 +391,17 @@ export function buildIssueBody(
     `**${competitor.label}** · ${SOURCE_LABEL[item.source]} · published ${published} · impact **${IMPACT_LABEL[analysis.impact]}** · owned by **${actionOwner(action)}**`,
     image ? `<img src="${image.url}" alt="${image.altText}" width="720" />` : null,
     `## What you need to know\n${analysis.summary}`,
-    `## Recommended action\n**${actionLabel(action)}**${SPACED_EN_DASH}${action.detail}`,
-    `## Related team(s)\n${teamsSection(action)}`,
-    evidenceSection(action),
-    `## Impact\n${impactScale(analysis.impact)}`,
     `## More detail\n${bullets(analysis.keyPoints, "The source gave nothing beyond the summary above.")}`,
+    `## Recommended action\n**${actionLabel(action)}**${SPACED_EN_DASH}${action.detail}`,
+    evidenceSection(action),
+    `## Related team(s)\n${teamsSection(action)}`,
+    `## Impact\n${impactScale(analysis.impact)}`,
     pagesSection(alert, action, visuals),
     docsThatWouldChangeSection(alert, action),
-    `## Open questions\n${bullets(analysis.openQuestions, "None raised.")}`,
+    // Whatever reaches this heading asks something. The schema already holds
+    // model output to it; running it again here covers the lines the gate and
+    // the docs check write themselves.
+    `## Open questions\n${bullets(toOpenQuestions(analysis.openQuestions), "None raised.")}`,
     `## Sources\n- [${competitor.label} ${SOURCE_LABEL[item.source]}](${entryUrl(item)})${
       image ? `\n- Feature image (${image.origin}): ${image.url}` : ""
     }`,
