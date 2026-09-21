@@ -212,6 +212,7 @@ ${TEAM_RULES}
   - update_pages: name the page and what it should say. Good: "On the compare to render page, say Render now ships managed object storage and Railway answers it with storage buckets." Bad: "The compare page is out of date." A page action whose opening sentence does not say which page is unusable in the embed.
 - "railway_refs" cites Railway URLs from the corpus. Only cite URLs that exist in it. When an action is update_pages, the ref for the page to edit carries "suggested_edit", "proposed_text", and "edit_kind": the instruction, the copy to paste, and what to do with it. Use an empty array when no cited page is genuinely relevant.
 - "open_questions" is 0 to 3 things that change what Railway should do and that you could not settle. This is where an unproven gap goes. It is a better answer than an action, not a worse one.
+  Write each one as a question, ending in a question mark. "Is Render's per-request billing on every plan, or only the paid ones?" is a question. "Whether Render's per-request billing is on every plan" is the same thought with the asking taken out of it, and code either repairs it or drops it, so ask it yourself. State the fact you found before the question when it helps – "The post names no region: which regions get this first?" – and end on the question either way.
 - Do not invent product facts about Railway or the competitor. If the source text is thin, say so in the summary and rate impact on what the post does show: a post with no feature visible in it is minor.
 
 Every product action carries its own evidence, and every part of it is checked against Railway's stored docs before anyone is asked to do the work:
@@ -280,7 +281,7 @@ export const RESPONSE_SHAPE = `{
       "edit_kind": "replace" | "insert"
     }
   ],
-  "open_questions": ["string"]
+  "open_questions": ["string (a question, worded as one and ending in ?)"]
 }`;
 
 export interface PromptContext {

@@ -171,12 +171,14 @@ function unverifiedQuestions(
   page: string,
   closestDoc: string | undefined,
 ): string[] {
+  // Each one ends on the question, because the heading it lands under says
+  // these are questions and a line that trails off into a fact is not one.
   const questions = [
-    `Does this change anything ${pageNameFromUrl(page)} says about ${label}? Nobody has checked: ${page}.`,
+    `Nobody has read ${page} against this launch: does anything ${pageNameFromUrl(page)} says about ${label} change?`,
   ];
   if (closestDoc) {
     questions.push(
-      `What does Railway already ship here? ${closestDoc} is the closest page in the corpus, and it has not been read against this launch.`,
+      `${closestDoc} is the closest page in the corpus and nobody has read it against this launch: what does Railway already ship here?`,
     );
   }
   return questions;

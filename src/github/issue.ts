@@ -1,3 +1,4 @@
+import { toOpenQuestions } from "../analysis/questions.js";
 import { relevantDocs } from "../analysis/verify.js";
 import { COMPETITORS, type Config } from "../config.js";
 import { actionLabel, actionOwner, IMPACT_LABEL, IMPACT_MEANING, SOURCE_LABEL } from "../labels.js";
@@ -373,7 +374,10 @@ export function buildIssueBody(
     `## More detail\n${bullets(analysis.keyPoints, "The source gave nothing beyond the summary above.")}`,
     pagesSection(alert, action, visuals),
     docsThatWouldChangeSection(alert, action),
-    `## Open questions\n${bullets(analysis.openQuestions, "None raised.")}`,
+    // Whatever reaches this heading asks something. The schema already holds
+    // model output to it; running it again here covers the lines the gate and
+    // the docs check write themselves.
+    `## Open questions\n${bullets(toOpenQuestions(analysis.openQuestions), "None raised.")}`,
     `## Sources\n- [${competitor.label} ${SOURCE_LABEL[item.source]}](${entryUrl(item)})${
       image ? `\n- Feature image (${image.origin}): ${image.url}` : ""
     }`,

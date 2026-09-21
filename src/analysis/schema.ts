@@ -14,6 +14,7 @@ import {
 } from "../types.js";
 import { parseDate, sanitizeCopy } from "../util/text.js";
 import { UNSTATED_NO_ACTION_REASON } from "./noAction.js";
+import { toOpenQuestions } from "./questions.js";
 
 /**
  * A field the model means to leave out but sends as "" instead. Read as
@@ -276,7 +277,9 @@ export function normalizeAnalysis(parsed: z.infer<typeof analysisSchema>): Analy
         ...(editKind ? { editKind } : {}),
       };
     }),
-    openQuestions: openQuestions.map(clean).filter(Boolean),
+    // A line that does not ask anything is dropped rather than rewritten into
+    // one: see `questions.ts` for why the repair stops where it does.
+    openQuestions: toOpenQuestions(openQuestions.map(clean).filter(Boolean)),
     ...(pagesRead.length > 0 ? { pagesRead: pagesRead.map((url) => url.trim()) } : {}),
   };
 }

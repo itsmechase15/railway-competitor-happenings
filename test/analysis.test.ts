@@ -37,14 +37,14 @@ describe("reading a model reply", () => {
         key_points: ["S3-compatible"],
         actions: [{ type: "consider_enhancing", railway_feature: "Storage buckets", detail: "Add X." }],
         railway_refs: [{ url: "https://docs.railway.com/storage-buckets", claim: "Buckets exist." }],
-        open_questions: ["Pricing?"],
+        open_questions: ["What does a bucket cost?"],
       }),
     );
 
     expect(snake.keyPoints).toEqual(["S3-compatible"]);
     expect(snake.actions[0]?.feature).toBe("Storage buckets");
     expect(snake.railwayRefs[0]?.url).toBe("https://docs.railway.com/storage-buckets");
-    expect(snake.openQuestions).toEqual(["Pricing?"]);
+    expect(snake.openQuestions).toEqual(["What does a bucket cost?"]);
   });
 
   it("keeps the teams a model named for an action, in its own words", () => {
