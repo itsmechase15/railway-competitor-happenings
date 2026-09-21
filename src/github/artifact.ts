@@ -17,15 +17,17 @@ const log = createLogger("artifact");
  * has to click is the thing this replaces – the point of the picture is that it
  * is already on the screen.
  *
- * **This repo is private, which decides the URL.** There is no address for a
- * file in it that an unauthenticated fetch can read, so the embed has to be one
- * the reader's own browser can authenticate. Two facts settle which:
+ * **This repo is public, so the URL only has to outlive the run.** Anybody's
+ * browser can read a file in it without signing in, which leaves one thing to
+ * get right: the address has to still resolve long after the job that wrote it
+ * finished. Two facts settle which:
  *
- * - GitHub does not send its own URLs through the camo image proxy, and camo
- *   fetches anonymously anyway – a proxied private URL could never resolve. A
- *   `github.com/...` image is fetched by the reader's browser, carrying the
- *   github.com session it already has.
- * - A commit SHA never moves, and neither does a blob at one.
+ * - A commit SHA never moves, and neither does a blob at one. A branch path
+ *   does move, and the picture an open issue points at must not change the next
+ *   time the same page is photographed.
+ * - A URL with a credential in its query expires. An anonymous
+ *   `raw.githubusercontent.com` address at the same SHA is the same durable
+ *   file by another name; the signed one the contents API hands back is not.
  *
  * So the embed is `github.com/<repo>/blob/<commit sha>/<path>?raw=true`, and
  * `download_url` from the contents API is never it. That field is a
@@ -56,7 +58,7 @@ export interface ArtifactWriter {
   write(path: string, png: Buffer, message: string): Promise<string | null>;
 }
 
-/** The web host, which is the one a reader looking at the issue is signed in to. */
+/** The web host, which serves a blob at a commit SHA to anybody who asks for it. */
 const GITHUB_WEB_BASE = "https://github.com";
 
 /**

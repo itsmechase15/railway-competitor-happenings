@@ -15,13 +15,12 @@ Nothing in this folder was ever published to railway.com, and the caption in the
 issue says so.
 
 The embed is `github.com/<repo>/blob/<commit sha>/<path>?raw=true`, pinned to
-the commit that wrote the file. This repo is private, so the address has to be
-one the reader's own browser can authenticate: github.com is the host their
-session is on, and GitHub serves its own URLs directly rather than through the
-camo image proxy, which fetches anonymously and could never read a private repo.
-The `download_url` the contents API returns is not that address – it is a
-`raw.githubusercontent.com` URL with a signed token on the end, good for
-minutes.
+the commit that wrote the file. This repo is public, so any reader's browser can
+fetch it without signing in, and the SHA is what keeps it showing the same
+picture a week later; an unsigned `raw.githubusercontent.com` address at that
+SHA is the same file by another name. The `download_url` the contents API
+returns is neither – it is a `raw.githubusercontent.com` URL with a signed token
+on the end, good for minutes.
 
 Each pair is named for the page, a hash of the edit, and the day it was taken,
 ending `-before.png` and `-after.png`. Re-running the same recommendation the

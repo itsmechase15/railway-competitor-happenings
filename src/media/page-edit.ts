@@ -57,8 +57,8 @@ export interface PageEditPlan {
 export interface PageShots {
   /**
    * Where the reader's browser fetches each image from. `github.com` addresses
-   * with no credential in them, because this repo is private and the issue has
-   * to still show the pictures next week – see `src/github/artifact.ts`.
+   * pinned to a commit and with no credential in them, because the issue has to
+   * still show the pictures next week – see `src/github/artifact.ts`.
    */
   beforeUrl: string;
   afterUrl: string;

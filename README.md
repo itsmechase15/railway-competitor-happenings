@@ -157,13 +157,15 @@ exist yet.
 
 A browser renders an image it can fetch, so both PNGs are committed to
 [`artifacts/update-pages/`](./artifacts/update-pages/) through the contents API
-before the issue is opened. This repo is private, so what the issue embeds is
-`github.com/<repo>/blob/<commit sha>/<path>?raw=true`: github.com is the host
-the reader is already signed in to, GitHub does not send its own URLs through
-the anonymous camo image proxy, and a commit SHA never moves. The contents API's
-own `download_url` is a `raw.githubusercontent.com` address signed with a
-short-lived token, which renders for minutes and 404s for everybody who opens
-the issue afterwards, so it never reaches an issue body. Committing is the only
+before the issue is opened. This repo is public, so anybody's browser can read
+them without signing in, and what the issue embeds is
+`github.com/<repo>/blob/<commit sha>/<path>?raw=true`: a commit SHA never moves,
+so the picture an open issue points at stays the picture that was taken for it.
+A plain `raw.githubusercontent.com` address at the same SHA, with no token on
+it, is the same durable file. The contents API's own `download_url` is not: it
+is a `raw.githubusercontent.com` address signed with a short-lived token, which
+renders for minutes and 404s for everybody who opens the issue afterwards, so it
+never reaches an issue body. Committing is the only
 thing in the app that writes to the repo, and the reason `daily.yml` and
 `force-post.yml` grant `contents: write`. The files are named for the page, a
 hash of both sides of the edit, and the day they were taken: a second run the
