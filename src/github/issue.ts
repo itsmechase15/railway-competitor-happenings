@@ -368,11 +368,14 @@ function bullets(values: string[], empty: string): string {
  * the full detail, page citations, suggested edits, open questions – lives
  * here, scoped to the one job this issue is asking for.
  *
- * The order is what a reader needs in the order they need it: what happened,
- * then what to do about it, then who it is for. Somebody who reads that far and
- * closes the tab has the whole point of the issue, so everything that justifies
- * the action – the gap, the impact scale, the cited pages – comes after all
- * three rather than between them.
+ * The order is what a reader needs in the order they need it: the news in one
+ * sentence, the rest of the news in bullets, then what to do about it.
+ * Somebody who reads that far and closes the tab has the whole point of the
+ * issue, so everything that justifies the ask – the gap, the teams, the impact
+ * scale, the cited pages – comes after all three rather than between them. The
+ * detail sits above the action rather than below it because a reader who has
+ * not understood the launch cannot judge the recommendation, and it is the
+ * order the Discord embed already reads in.
  */
 export function buildIssueBody(
   alert: AnalyzedItem,
@@ -388,11 +391,11 @@ export function buildIssueBody(
     `**${competitor.label}** · ${SOURCE_LABEL[item.source]} · published ${published} · impact **${IMPACT_LABEL[analysis.impact]}** · owned by **${actionOwner(action)}**`,
     image ? `<img src="${image.url}" alt="${image.altText}" width="720" />` : null,
     `## What you need to know\n${analysis.summary}`,
-    `## Recommended action\n**${actionLabel(action)}**${SPACED_EN_DASH}${action.detail}`,
-    `## Related team(s)\n${teamsSection(action)}`,
-    evidenceSection(action),
-    `## Impact\n${impactScale(analysis.impact)}`,
     `## More detail\n${bullets(analysis.keyPoints, "The source gave nothing beyond the summary above.")}`,
+    `## Recommended action\n**${actionLabel(action)}**${SPACED_EN_DASH}${action.detail}`,
+    evidenceSection(action),
+    `## Related team(s)\n${teamsSection(action)}`,
+    `## Impact\n${impactScale(analysis.impact)}`,
     pagesSection(alert, action, visuals),
     docsThatWouldChangeSection(alert, action),
     // Whatever reaches this heading asks something. The schema already holds
