@@ -347,7 +347,7 @@ describe("the order an issue reads in", () => {
       "The gap this closes",
       "Impact",
       "More detail",
-      "Railway docs for context",
+      "Railway docs this was checked against",
       "Open questions",
       "Sources",
     ]);

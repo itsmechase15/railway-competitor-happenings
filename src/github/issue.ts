@@ -223,9 +223,35 @@ function pageEdit(ref: RailwayRef, visual: PageVisual | undefined): string {
 }
 
 /**
+ * What an empty list of cited pages means, which is not that a lookup fell
+ * over.
+ *
+ * On a `consider_building` or a `consider_enhancing` action, no Railway page
+ * covering the capability is the ordinary case and it is close to the point of
+ * the issue: Railway does not ship this, so Railway has not written about it.
+ * The old line here read as a search that came back empty and left a reader
+ * wondering whether the run was broken. The gap's own evidence page is a
+ * separate thing and it is quoted above, so this says where that is rather
+ * than repeating it.
+ */
+function noCitedPages(action: RecommendedAction): string {
+  if (isPageAction(action)) {
+    return "No indexed Railway compare, migrate, pricing, or features page says anything about this launch, so there is no page here to paste copy onto. A page with nothing on the topic is itself worth a look.";
+  }
+  const evidence = action.gap
+    ? ' The page the gap was read off is quoted under "The gap this closes" above.'
+    : "";
+  return `Railway's docs have no page on this capability, which is what the action says rather than a search that came back empty.${evidence}`;
+}
+
+/**
  * The cited pages. Marketing gets the pages to edit with the copy to paste,
  * because editing the page is the job; product gets the docs that speak to the
  * action it is being asked to take, and nothing else.
+ *
+ * The heading says these pages were read against the action, which is the
+ * thing that separates them from the docs listed further down: those are the
+ * pages somebody rewrites the day Railway ships this.
  */
 function pagesSection(
   alert: AnalyzedItem,
@@ -234,15 +260,10 @@ function pagesSection(
 ): string {
   const heading = isPageAction(action)
     ? "## Railway pages to update"
-    : "## Railway docs for context";
+    : "## Railway docs this was checked against";
   const refs = supportingRefs(alert, action);
 
-  if (refs.length === 0) {
-    const empty = isPageAction(action)
-      ? "No indexed Railway compare or migrate page covers this yet, which is itself worth a look."
-      : "No Railway docs page in context speaks to this action, so nothing here has been checked against what Railway ships.";
-    return `${heading}\n_${empty}_`;
-  }
+  if (refs.length === 0) return `${heading}\n_${noCitedPages(action)}_`;
 
   if (isPageAction(action)) {
     const note =
