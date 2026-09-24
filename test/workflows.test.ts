@@ -229,9 +229,34 @@ describe("the daily schedule", () => {
     expect(daily).toContain('- cron: "0 14 * * *"');
   });
 
-  it("also schedules the winter offset, and skips whichever entry is too early", () => {
+  it("also schedules the winter offset", () => {
     expect(daily).toContain('- cron: "0 15 * * *"');
-    expect(daily).toContain("TZ=America/Los_Angeles");
+  });
+
+  /**
+   * Both entries used to proceed all summer, because the gate only dropped a
+   * run before 07:00 and 15:00 UTC is 08:00 in Los Angeles in July. Picking
+   * the entry by today's UTC offset leaves exactly one of the two running,
+   * whichever way the clocks have gone.
+   */
+  it("runs the entry that is 07:00 in Los Angeles today, and drops the other", () => {
+    expect(daily).toContain("TZ=America/Los_Angeles date +%z");
+    expect(daily).toContain("-0700) today='0 14 * * *'");
+    expect(daily).toContain("-0800) today='0 15 * * *'");
+    expect(daily).toContain('[ "$schedule" != "$today" ]');
+  });
+
+  /**
+   * The offset decides, not the clock at the moment the run starts: GitHub
+   * delays scheduled runs under load, and an hour's delay used to be the
+   * difference between a morning's alert and nothing at all.
+   */
+  it("does not read the hour the run happens to start at", () => {
+    expect(daily).not.toContain("date +%H");
+  });
+
+  it("leaves a run started by hand alone", () => {
+    expect(daily).toContain('[ "${{ github.event_name }}" = "schedule" ]');
   });
 
   it("can open an issue per action", () => {
