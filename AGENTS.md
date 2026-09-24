@@ -107,14 +107,23 @@ which is what you want on a box with no Chromium: run
  and it is a different section from "Docs that would change if this ships",
  which is the work the day Railway does ship it. Do not word either of them so
  it reads as a search that fell over.
-- **A morning with nothing in it is posted, not skipped.** A daily run that
- read the sources and found nothing new posts one plain line, because silence
- and a broken job read identically in a channel. It is held back by three
- things and only those three – an alert already went out, something new turned
- up and never became an alert, or not one source could be read – and each is a
- run that cannot honestly call the day quiet. It is not an embed, it is not
- stored, it is not retried, and posting one URL by hand never triggers it. See
- [`src/discord/quiet-day.ts`](./src/discord/quiet-day.ts) and
+- **A morning with nothing in it is posted, not skipped, and posted once.** A
+ daily run that read the sources and found nothing new posts one plain line,
+ because silence and a broken job read identically in a channel. It is held
+ back by three things and only those three – an alert already went out,
+ something new turned up and never became an alert, or not one source could be
+ read – and each is a run that cannot honestly call the day quiet. It is not an
+ embed, the line is not retried, and posting one URL by hand never triggers it.
+ What *is* stored is the date: an alert is deduped on the item under it and this
+ line has none, so the first run of a day in America/Los_Angeles takes that date
+ in `quiet_days` and speaks, and any later run of the same day finds it taken.
+ Count the day where the schedule is written and nowhere else – 14:00 and 15:00
+ UTC are one morning there, and a day counted in UTC splits a hand-started
+ evening run off into a second one. The workflow gate that runs only the cron
+ entry which is 07:00 in Los Angeles today is the cheap half of this, and it is
+ not a substitute: a rerun, a hand-started run, and a gate that cannot read the
+ zone all reach the claim. See [`src/discord/quiet-day.ts`](./src/discord/quiet-day.ts),
+ [`migrations/004_quiet_days.sql`](./migrations/004_quiet_days.sql), and
  `test/quiet-day.test.ts`.
 - **"Railway already does this" is evidence, not a mood.** The comfortable
  answer is a claim about the product, so it is checked the way a gap claim is:

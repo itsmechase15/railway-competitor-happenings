@@ -26,6 +26,7 @@ export class MemoryStore implements Store {
   private readonly items = new Map<string, StoredItem>();
   private readonly pages = new Map<string, RailwayPage>();
   private readonly claims: RailwayClaim[] = [];
+  private readonly quietDays = new Set<string>();
 
   async insertNewItems(items: CandidateItem[]): Promise<StoredItem[]> {
     const inserted: StoredItem[] = [];
@@ -66,6 +67,13 @@ export class MemoryStore implements Store {
   async getUnpostedAnalyses(): Promise<PendingPost[]> {
     // Analyses are never persisted here, so there is never a backlog.
     return [];
+  }
+
+  /** Nothing outlives the process, so the day is only ever claimed once here. */
+  async claimQuietDay(day: string): Promise<boolean> {
+    if (this.quietDays.has(day)) return false;
+    this.quietDays.add(day);
+    return true;
   }
 
   async listPageMeta(): Promise<PageMeta[]> {

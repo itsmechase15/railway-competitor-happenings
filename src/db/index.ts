@@ -106,6 +106,10 @@ class UnreachableDatabaseFallback implements Store {
     return this.attempt((store) => store.getUnpostedAnalyses(...args));
   }
 
+  claimQuietDay(...args: Parameters<Store["claimQuietDay"]>) {
+    return this.attempt((store) => store.claimQuietDay(...args));
+  }
+
   listPageMeta() {
     return this.attempt((store) => store.listPageMeta());
   }
@@ -184,6 +188,12 @@ class ReadOnlyStore implements Store {
 
   getUnpostedAnalyses(...args: Parameters<Store["getUnpostedAnalyses"]>) {
     return this.inner.getUnpostedAnalyses(...args);
+  }
+
+  async claimQuietDay() {
+    // A dry run prints the line rather than posting it, so there is no day to
+    // spend – and spending one would mute the real run that follows it.
+    return true;
   }
 
   listPageMeta() {
