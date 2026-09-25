@@ -481,13 +481,18 @@ export async function runCycle(config: Config): Promise<RunSummary> {
 
     // Once, at the end, because the channel is owed an answer on a morning
     // when neither competitor shipped anything. Every reason not to send it is
-    // in `quietDayMessage`, and each one is a run that should stay quiet.
-    summary.quietDay = await postQuietDay(poster, {
-      alerts: pending.length + fresh.length,
-      newItems: summary.newItems,
-      sourcesRead: collection.sourcesRead,
-      unread: collection.unread,
-    });
+    // in `quietDayMessage`, and each one is a run that should stay quiet. The
+    // store is there for the sixth reason: this morning has already had one.
+    summary.quietDay = await postQuietDay(
+      poster,
+      {
+        alerts: pending.length + fresh.length,
+        newItems: summary.newItems,
+        sourcesRead: collection.sourcesRead,
+        unread: collection.unread,
+      },
+      store,
+    );
 
     return summary;
   } finally {

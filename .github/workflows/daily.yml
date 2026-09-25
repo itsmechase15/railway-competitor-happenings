@@ -2,9 +2,10 @@ name: Daily competitor happenings
 
 on:
   schedule:
-    # 14:00 UTC is 07:00 PT during daylight saving time, which is what the plan
-    # asks for. The second entry covers the winter, and the guard below drops
-    # whichever of the two lands before 07:00 in Los Angeles today.
+    # Los Angeles is UTC-7 in summer and UTC-8 in winter, so 07:00 there is one
+    # of these two and never both. Both are scheduled and the gate below runs
+    # whichever one is this morning's, so the clocks changing costs nobody an
+    # edit and nobody a second run.
     - cron: "0 14 * * *" # 07:00 PDT
     - cron: "0 15 * * *" # 07:00 PST
   workflow_dispatch:
@@ -37,15 +38,28 @@ jobs:
     # extra quarter of an hour goes.
     timeout-minutes: 45
     steps:
-      - name: Check it is not before 07:00 in America/Los_Angeles
+      - name: Check this is today's 07:00 entry in America/Los_Angeles
         id: window
         run: |
-          hour="$(TZ=America/Los_Angeles date +%H)"
-          # Only a too-early run bails. GitHub delays scheduled workflows under
-          # load – an exact 07 match turns any late start into a silently
-          # skipped day – and dedupe makes a second entry a no-op if both land.
-          if [ "${{ github.event_name }}" = "schedule" ] && [ "$hour" -lt 7 ]; then
-            echo "Local hour is $hour – too early, the later cron entry covers today."
+          # Which cron entry is this morning's is decided by today's offset,
+          # not by the clock when the run happens to start. GitHub delays
+          # scheduled workflows under load, and a late start moves the hour
+          # while leaving the entry that scheduled it alone – so a delay costs
+          # a few minutes rather than the whole day, and the entry that is an
+          # hour off today exits here instead of running the morning twice.
+          offset="$(TZ=America/Los_Angeles date +%z)"
+          case "$offset" in
+            -0700) today='0 14 * * *' ;;
+            -0800) today='0 15 * * *' ;;
+            # There is no third answer. A zone database that gives one is a
+            # broken runner, and both entries running is the safer failure:
+            # item dedupe and the quiet-day claim absorb the duplicate.
+            *) today='' ;;
+          esac
+
+          schedule="${{ github.event.schedule }}"
+          if [ "${{ github.event_name }}" = "schedule" ] && [ -n "$today" ] && [ "$schedule" != "$today" ]; then
+            echo "Today is $offset, so '$today' is 07:00 in Los Angeles and '$schedule' is not."
             echo "proceed=false" >> "$GITHUB_OUTPUT"
           else
             echo "proceed=true" >> "$GITHUB_OUTPUT"

@@ -97,6 +97,14 @@ export interface Store {
   getUnpostedAnalyses(since: Date, limit: number): Promise<PendingPost[]>;
 
   /**
+   * Take the quiet-day line for `day`, a date like `2026-09-24` in the zone
+   * the schedule is written in, or refuse it because an earlier run of the
+   * same day already took it. Atomic, so two runs that overlap cannot both
+   * decide they are the one telling the channel the morning was quiet.
+   */
+  claimQuietDay(day: string): Promise<boolean>;
+
+  /**
    * Every corpus row without its body, retired ones included. This is what the
    * refresh plans against: which URLs are known, what they last hashed to,
    * when each was read, and which are on their way out.

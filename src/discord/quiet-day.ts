@@ -17,6 +17,36 @@ const log = createLogger("quiet-day");
  */
 export const QUIET_DAY_LEAD = "No new competitor products or features today.";
 
+/**
+ * The zone the schedule is written in, and so the one a morning is counted in.
+ * The workflow fires at 14:00 or 15:00 UTC depending on the season; both are
+ * the same morning here, and a day counted in UTC would call them two.
+ */
+const SCHEDULE_ZONE = "America/Los_Angeles";
+
+/** Today where the schedule lives, as `2026-09-24`. */
+export function scheduleDay(now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: SCHEDULE_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const part = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((candidate) => candidate.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+/**
+ * The record of which mornings have already been called quiet. One question,
+ * asked of whatever is keeping state, so this module needs nothing else out of
+ * persistence and a test can answer it with a set.
+ */
+export interface QuietDayLog {
+  /** Take the day for this run, or false because an earlier run has it. */
+  claimQuietDay(day: string): Promise<boolean>;
+}
+
 /** What one run knows about itself by the time delivery is over. */
 export interface QuietDayRun {
   /** Alerts this run had to deliver: fresh analyses plus retried ones. */
@@ -86,14 +116,48 @@ export function quietDayMessage(run: QuietDayRun): DiscordMessage | null {
 }
 
 /**
- * Post it, at most once, at the end of a run. Called after delivery rather
- * than instead of it, so the count it reads is what actually went out.
+ * Whether this run is the one that speaks for the morning.
+ *
+ * A log that cannot answer is read as an unclaimed day. The failure it covers
+ * is a database this run could not write to, and between a morning said twice
+ * and a morning said not at all, the second is the one this message exists to
+ * prevent.
+ */
+async function claimDay(days: QuietDayLog, day: string): Promise<boolean> {
+  try {
+    return await days.claimQuietDay(day);
+  } catch (error) {
+    log.warn(
+      `could not record that ${day} was called quiet, so posting the line and risking a repeat`,
+      error instanceof Error ? error.message : error,
+    );
+    return true;
+  }
+}
+
+/**
+ * Post it, at most once a day, at the end of a run. Called after delivery
+ * rather than instead of it, so the count it reads is what actually went out.
+ *
+ * Once a day and not once a run, because the workflow is scheduled twice for
+ * one morning and a hand-started run is a third. The alerts are deduped on the
+ * items behind them and this line has no item, so the day it belongs to is
+ * what it is deduped on: the first run of a Los Angeles day takes the day, and
+ * a later one finds it taken and says nothing.
  *
  * A refused post is logged and dropped rather than stored for a retry: the
  * retry queue exists so an alert about a launch is not lost, and this is not
- * about a launch. Tomorrow's run answers for tomorrow.
+ * about a launch. It keeps the day it took, because a channel that refused one
+ * message refuses the next one for the same reason, and a job that answers a
+ * missing permission by trying again every hour is a worse read than a quiet
+ * morning. Tomorrow's run answers for tomorrow.
  */
-export async function postQuietDay(poster: DiscordPoster, run: QuietDayRun): Promise<boolean> {
+export async function postQuietDay(
+  poster: DiscordPoster,
+  run: QuietDayRun,
+  days: QuietDayLog,
+  now: Date = new Date(),
+): Promise<boolean> {
   const message = quietDayMessage(run);
   if (!message) {
     if (run.alerts === 0) {
@@ -101,6 +165,12 @@ export async function postQuietDay(poster: DiscordPoster, run: QuietDayRun): Pro
         `nothing to post, and no quiet-day line either: ${run.newItems} new items this run, ${run.sourcesRead} sources read`,
       );
     }
+    return false;
+  }
+
+  const day = scheduleDay(now);
+  if (!(await claimDay(days, day))) {
+    log.info(`the channel was already told ${day} was quiet – not saying it twice`);
     return false;
   }
 

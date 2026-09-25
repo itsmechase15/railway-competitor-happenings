@@ -42,7 +42,9 @@ bot that fell over in the night are indistinguishable from the outside. It is
 held back on any run that has no business claiming a quiet day: one that posted
 an alert, one where something new turned up and never became an alert, and one
 that could not read a single source. A feed that failed while the others
-answered is named on the end of the line.
+answered is named on the end of the line. It goes out once a morning however
+many times the job runs, because a line with no launch behind it has no item
+to be deduped on and is deduped on its date instead.
 
 The mistake this bot is built to avoid is the opposite one – a GitHub issue
 telling Railway to build something Railway already ships – because that issue
@@ -283,10 +285,16 @@ embed shape, docs grounding, data store, impact scale, actions, and phasing.
 
 | Workflow | When | What it does |
 | --- | --- | --- |
-| `daily.yml` | 14:00 UTC (7am PT), or by hand | One full cycle: refresh the Railway index, collect, dedupe, analyze, open issues, review them, post – or say the morning held nothing |
+| `daily.yml` | 7am PT, or by hand | One full cycle: refresh the Railway index, collect, dedupe, analyze, open issues, review them, post – or say the morning held nothing |
 | `force-post.yml` | By hand, or a URL committed to `.github/force-post-url.txt` | Posts one named announcement, ignoring dedupe and the first-run seed guard |
 | `check-secrets.yml` | By hand | Names every missing secret and asks Discord what the bot can see. Posts nothing |
 | `ci.yml` | Push and pull request | Typecheck, tests, build |
+
+7am PT is 14:00 UTC for most of the year and 15:00 UTC in winter, so the daily
+run is scheduled at both and the job's first step keeps whichever entry is
+07:00 in Los Angeles today. It decides on the zone's offset rather than on the
+clock, so a run GitHub starts late is still that morning's run, and the entry
+that is an hour off exits before the checkout.
 
 The first run for each competitor and source records its backlog without
 alerting, so turning on a new source never floods the channel. Caps are 8 new
@@ -300,12 +308,15 @@ items per source and 12 per run.
 psql "$DATABASE_URL" -f migrations/001_init.sql
 psql "$DATABASE_URL" -f migrations/002_close_data_api.sql
 psql "$DATABASE_URL" -f migrations/003_docs_corpus.sql
+psql "$DATABASE_URL" -f migrations/004_quiet_days.sql
 ```
 
    The first creates the four tables. The second takes them off Supabase's Data
    API, and it is not optional. See below for why. The third gives `pages` the
    bookkeeping that makes it a corpus: content hash, what each page is evidence
-   of, when it last changed, and when something last reasoned against it.
+   of, when it last changed, and when something last reasoned against it. The
+   fourth is one date per morning the channel has been told nothing shipped,
+   which is what keeps a second run of the same day from saying it again.
 
 2. Add the secrets under **Settings → Secrets and variables → Actions**. Values
    never go in the repo.
@@ -431,6 +442,7 @@ off when you are iterating on something else.
 | `migrations/001_init.sql` | The four tables |
 | `migrations/002_close_data_api.sql` | Takes those tables off Supabase's Data API |
 | `migrations/003_docs_corpus.sql` | Makes `pages` a corpus: hashes, kinds, and freshness |
+| `migrations/004_quiet_days.sql` | One date per morning already called quiet, so no run repeats one |
 
 ## Not this
 

@@ -70,7 +70,14 @@ not an outage.
 
 ## Daily loop
 
-GitHub Actions cron at **14:00 UTC (7am PT)**. One run does:
+GitHub Actions cron at **7am PT**, which is 14:00 UTC in summer and 15:00 in
+winter. Both are scheduled and the first step of the job runs whichever of
+them is 07:00 in Los Angeles today, read off the zone's UTC offset rather than
+off the clock: GitHub delays scheduled runs under load, and a delay should
+cost a morning a few minutes rather than the whole thing. The other entry
+exits in that step, before checkout. A run started by hand is never gated.
+
+One run does:
 
 1. **Refresh the docs corpus.** Discover what Railway publishes from the union
    of the docs sitemap, `llms.txt`, the links held pages carry, and the product
@@ -140,6 +147,16 @@ an analysis that gave up – the run log says which), or not one source could be
 read, which is a blind morning rather than a quiet one. A source that failed
 while others answered is named on the end of the line rather than counted as
 quiet. Posting one named URL by hand is not a daily run and never adds it.
+
+The fourth thing is not a reason to stay quiet but a reason not to repeat
+itself: the morning has already had its line. Every alert is deduped on the
+item behind it and this line has no item, so it is deduped on the day it
+belongs to. The first run of a day in Los Angeles inserts that date into
+`quiet_days` and speaks; a second run of the same day – the other cron entry
+were the gate ever to let it through, a rerun, a hand-started one – finds the
+row and says nothing. The day is counted in Los Angeles because that is where
+the schedule is written, so a run at 14:00 UTC and one at 15:00 are the same
+morning and one at 02:00 UTC is still yesterday evening's.
 
 Page citations, the copy a page edit proposes, and open questions live in the
 issue, not the embed. A page edit's sentence names the page and one line under
@@ -303,6 +320,11 @@ Tables, in `migrations/001_init.sql`:
 `migrations/003_docs_corpus.sql` gives `pages` the bookkeeping that makes it a
 corpus rather than a cache: `kind`, `content_hash`, `changed_at`,
 `discovered_from`, `missing_streak`, `last_used_at`, and `retired_at`.
+
+`migrations/004_quiet_days.sql` adds `quiet_days`, one date per morning the
+channel has been told nothing shipped. The primary key is the whole mechanism:
+the insert is the claim, so the run that writes the date is the run that
+posts.
 
 None of it is reachable over Supabase's Data API, by
 `migrations/002_close_data_api.sql`: row-level security on with no policies, no

@@ -310,6 +310,22 @@ export class PostgresStore implements Store {
     return pending;
   }
 
+  /**
+   * The insert is the claim. `day` is the primary key, so the first run of a
+   * morning writes the row and every later one conflicts and is handed
+   * nothing back, with no read-then-write window in between.
+   */
+  async claimQuietDay(day: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `INSERT INTO quiet_days (day)
+       VALUES ($1::date)
+       ON CONFLICT (day) DO NOTHING
+       RETURNING day`,
+      [day],
+    );
+    return result.rowCount === 1;
+  }
+
   async listPageMeta(): Promise<PageMeta[]> {
     const result = await this.pool.query<PageRow>(
       `SELECT url, title, '' AS text, '{}'::text[] AS mentions, kind, content_hash,

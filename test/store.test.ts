@@ -118,3 +118,25 @@ describe("keeping the corpus", () => {
     expect((await store.listPageMeta())[0]?.lastUsedAt).toEqual(now);
   });
 });
+
+/**
+ * The quiet-day line has no item to dedupe on, so the day is what it is
+ * deduped on. Postgres does this with a primary key and an insert that may
+ * conflict; what both implementations owe the caller is the same answer:
+ * exactly one run of a morning is told it may speak.
+ */
+describe("claiming a morning", () => {
+  it("hands the day to the first run that asks and to no other", async () => {
+    const store = new MemoryStore();
+
+    expect(await store.claimQuietDay("2026-09-24")).toBe(true);
+    expect(await store.claimQuietDay("2026-09-24")).toBe(false);
+  });
+
+  it("hands out the next day regardless", async () => {
+    const store = new MemoryStore();
+    await store.claimQuietDay("2026-09-24");
+
+    expect(await store.claimQuietDay("2026-09-25")).toBe(true);
+  });
+});
