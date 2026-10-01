@@ -16,7 +16,7 @@ rather than a blank: a title saying which kind of nothing this is, one sentence
 about this launch, and the docs pages the verdict rests on.
 
 ```
-**None – Railway already does this**
+**None – Railway already has Serverless**
 Render's per-request billing for idle services matches what Railway Serverless
 already does: a container stops when it has no inbound traffic and starts again
 on the next request.
@@ -24,7 +24,8 @@ See: [Serverless](https://docs.railway.com/deployments/serverless)
 ```
 
 There are five kinds, each with its own title. `already_covered` is "None –
-Railway already does this", and it is the only one that has to carry pages: a
+Railway already has {feature}" when it can name the equivalent, or "None –
+Railway already does this" when it cannot, and it is the only one that has to carry pages: a
 claim about what Railway ships is checked the way a gap claim is, and a verdict
 whose pages fail becomes `unverified` instead. `not_a_gap` is "None – not a
 product gap", for pricing, company news, and a capability Railway chose not to

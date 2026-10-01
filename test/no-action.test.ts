@@ -18,6 +18,7 @@ const SCALING = "https://docs.railway.com/deployments/scaling";
 
 const covered: NoAction = {
   kind: "already_covered",
+  feature: "Serverless",
   reason:
     "Render's per-request billing for idle services matches what Railway Serverless already does: a container stops when it has no inbound traffic and starts again on the next request.",
   evidence: [
@@ -41,13 +42,19 @@ describe("noActionTitle", () => {
     expect(noActionTitle("already_covered")).toBe("None – Railway already does this");
     expect(noActionTitle("already_covered")).not.toContain("—");
   });
+
+  it("names Railway's equivalent when the verdict knows it", () => {
+    expect(noActionTitle("already_covered", "Railway", "Secrets")).toBe(
+      "None – Railway already has Secrets",
+    );
+  });
 });
 
 describe("renderNoAction", () => {
   it("leads with the title, then the sentence, then the pages", () => {
     expect(renderNoAction(covered)).toBe(
       [
-        "**None – Railway already does this**",
+        "**None – Railway already has Serverless**",
         covered.reason,
         `See: [Serverless](${SERVERLESS}), [Scaling](${SCALING})`,
       ].join("\n"),
@@ -117,7 +124,19 @@ describe("renderNoAction", () => {
   });
 
   it("names the product the caller asked it to name", () => {
-    expect(renderNoAction(covered, { product: "Railway" })).toContain("Railway already does this");
+    expect(renderNoAction(covered, { product: "Railway" })).toContain(
+      "Railway already has Serverless",
+    );
+  });
+
+  it("keeps the fallback title when no equivalent is named", () => {
+    expect(
+      renderNoAction({
+        kind: "already_covered",
+        reason: "Railway already ships this.",
+        evidence: [],
+      }),
+    ).toContain("**None – Railway already does this**");
   });
 });
 

@@ -25,10 +25,18 @@ export const UNSTATED_NO_ACTION_REASON =
   "The analysis recommended nothing and cited no Railway page, so nothing here has been checked against what Railway ships.";
 
 /** What the verdict is called, by kind. The product is named where it reads better. */
-export function noActionTitle(kind: NoActionKind, product = "Railway"): string {
+export function noActionTitle(
+  kind: NoActionKind,
+  product = "Railway",
+  feature?: string,
+): string {
   switch (kind) {
-    case "already_covered":
-      return `None${SPACED_EN_DASH}${product} already does this`;
+    case "already_covered": {
+      const named = feature?.trim();
+      return named
+        ? `None${SPACED_EN_DASH}${product} already has ${named}`
+        : `None${SPACED_EN_DASH}${product} already does this`;
+    }
     case "not_a_gap":
       return `None${SPACED_EN_DASH}not a product gap`;
     case "unverified":
@@ -56,6 +64,8 @@ export interface NoActionRenderOptions {
   /** Characters the reason is cut to. An embed field stops at 1024. */
   maxChars?: number;
   product?: string;
+  /** Railway's equivalent capability, when the title should name it. */
+  feature?: string;
 }
 
 /** Long enough for a docs page title, short enough not to fill the block. */
@@ -75,7 +85,8 @@ export function evidenceLabel(evidence: NoActionEvidence): string {
  */
 export function renderNoAction(noAction: NoAction, options: NoActionRenderOptions = {}): string {
   const escape = options.escape ?? ((text: string) => text);
-  const title = noActionTitle(noAction.kind, options.product);
+  const feature = noAction.feature ?? options.feature;
+  const title = noActionTitle(noAction.kind, options.product, feature);
   const reason = options.maxChars ? truncate(noAction.reason, options.maxChars) : noAction.reason;
 
   const links = noAction.evidence

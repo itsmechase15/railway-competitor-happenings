@@ -118,6 +118,7 @@ describe("reading a model reply", () => {
         actions: [],
         no_action: {
           kind: "already_covered",
+          feature: "Scaling",
           reason: "Railway already offers memory-heavy plan shapes on every tier.",
           evidence: [
             {
@@ -131,6 +132,7 @@ describe("reading a model reply", () => {
 
     expect(verdict.noAction).toEqual({
       kind: "already_covered",
+      feature: "Scaling",
       reason: "Railway already offers memory-heavy plan shapes on every tier.",
       evidence: [
         {
@@ -157,6 +159,7 @@ describe("reading a model reply", () => {
           actions: [],
           noAction: {
             kind: "already_covered",
+            feature: "Scaling",
             reason: "Railway already offers memory-heavy plan shapes on every tier.",
             evidence: [{ url: "https://docs.railway.com/deployments/scaling", title: "Scaling" }],
           },
@@ -171,6 +174,7 @@ describe("reading a model reply", () => {
 
     expect(verdict.analysis.noAction).toEqual({
       kind: "already_covered",
+      feature: "Scaling",
       reason: "Railway already offers memory-heavy plan shapes on every tier.",
       evidence: [{ url: "https://docs.railway.com/deployments/scaling", title: "Scaling" }],
     });
@@ -374,6 +378,18 @@ describe("checking a verdict against the docs", () => {
  * and the analyst is the only reader with the page and the launch both in
  * front of it. So the rule it writes under says the size the gate measures.
  */
+describe("what the analyst is told about an already_covered verdict", () => {
+  const prompt = buildAnalysisPrompt(storedItem());
+
+  it("asks for Railway's equivalent feature by name, not search-rank prose", () => {
+    expect(prompt).toContain('Put Railway\'s own name for the equivalent in "feature"');
+    expect(prompt).toContain("Railway already has Secrets");
+    expect(prompt).toContain("the equivalent of what this launch covers");
+    expect(prompt).toContain("Neither is \"already does this\" with no feature named");
+    expect(prompt).toContain("Bad: anything about searching the docs, ranking pages");
+  });
+});
+
 describe("what the analyst is told about the size of a page edit", () => {
   const prompt = buildAnalysisPrompt(storedItem());
 
