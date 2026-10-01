@@ -233,8 +233,11 @@ describe("one reply, end to end", () => {
 
     expect(analysis.actions).toEqual([]);
     // The verdict is the answer a reader wants off a gap the docs already
-    // cover: Railway does this, and here is the page nobody opened.
+    // cover: Railway has the equivalent, named, and here is the page.
     expect(analysis.noAction?.kind).toBe("already_covered");
+    expect(analysis.noAction?.feature).toBe("Privacy and consent");
+    expect(analysis.noAction?.reason).toContain("Railway already has Privacy and consent");
+    expect(analysis.noAction?.reason).not.toContain("documents this already");
     expect(analysis.noAction?.evidence.map((page) => page.url)).toContain(
       "https://docs.railway.com/enterprise/privacy",
     );

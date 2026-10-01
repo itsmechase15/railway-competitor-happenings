@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   copyFault,
   coverageMisses,
+  coveredFeature,
   gateActions,
   isDocumentationOnlyAction,
   isPackagingGap,
@@ -687,10 +688,10 @@ describe("what a reader gets when everything is dropped", () => {
   });
 
   /**
-   * "Railway already does this" is the answer a reader is after, so a gap the
-   * corpus answers on a page nobody opened says exactly that, with the page.
+   * "Railway already has X" is the answer a reader is after, so a gap the
+   * corpus answers on a page nobody opened names that equivalent, with the page.
    */
-  it("says Railway already does this when the docs answer the gap elsewhere", () => {
+  it("names Railway's equivalent feature when the docs answer the gap elsewhere", () => {
     const { analysis: gated } = gateActions(
       withAction(
         enhancing({
@@ -706,11 +707,35 @@ describe("what a reader gets when everything is dropped", () => {
 
     expect(gated.actions).toEqual([]);
     expect(gated.noAction?.kind).toBe("already_covered");
-    expect(gated.noAction?.reason).toContain("Railway documents this already");
+    expect(gated.noAction?.feature).toBe("Enterprise and compliance");
+    expect(gated.noAction?.reason).toContain("Railway already has Enterprise and compliance");
+    expect(gated.noAction?.reason).toContain("the equivalent of what this launch covers");
+    expect(gated.noAction?.reason).not.toContain("documents this already");
+    expect(gated.noAction?.reason).not.toContain("searching");
+    expect(gated.noAction?.reason).not.toContain("ranks");
+    expect(gated.noAction?.reason).not.toContain("never opened");
     // Titled off the corpus row, so the link reads as the page rather than a URL.
     expect(gated.noAction?.evidence).toEqual([
       { url: "https://docs.railway.com/enterprise/privacy", title: "Privacy and consent" },
     ]);
+  });
+
+  it("derives the equivalent from the coverage page when the action names no feature", () => {
+    const { analysis: gated } = gateActions(
+      withAction(
+        enhancing({
+          feature: undefined,
+          detail: "Add a consent decision per workspace so analytics can be turned off.",
+          gap: "Railway records no analytics consent decision and honors no do-not-track header",
+          evidenceUrl: "https://docs.railway.com/volumes",
+          evidenceQuote: "A volume attaches a persistent disk to exactly one service.",
+        }),
+      ),
+      context(),
+    );
+
+    expect(gated.noAction?.feature).toBe("Privacy and consent");
+    expect(gated.noAction?.reason).toContain("Railway already has Privacy and consent");
   });
 
   /**
@@ -726,6 +751,32 @@ describe("what a reader gets when everything is dropped", () => {
     expect(gated.actions).toEqual([]);
     expect(gated.noAction?.kind).toBe("not_a_gap");
     expect(gated.noAction?.reason).toContain("what a competitor charges");
+  });
+});
+
+describe("naming Railway's equivalent for a coverage drop", () => {
+  it("uses the action's feature when it has one", () => {
+    expect(
+      coveredFeature({ feature: "Secrets", gap: "no shared build artifact" }, [
+        { url: "https://docs.railway.com/variables", title: "Variables" },
+      ]),
+    ).toBe("Secrets");
+  });
+
+  it("uses a catalog page before a heading when the action names no feature", () => {
+    expect(
+      coveredFeature({ gap: "no shared build artifact" }, [
+        { url: "https://docs.railway.com/variables", title: "Handle Build-Time vs Runtime Secrets" },
+      ]),
+    ).toBe("Variables");
+  });
+
+  it("falls back to the coverage page title", () => {
+    expect(
+      coveredFeature(undefined, [
+        { url: "https://docs.railway.com/enterprise/privacy", title: "Privacy and consent" },
+      ]),
+    ).toBe("Privacy and consent");
   });
 });
 

@@ -1,5 +1,5 @@
 import { isMarketingTarget } from "../railway/pages.js";
-import { matchProducts } from "../railway/products.js";
+import { findProductByName, matchProducts, productForDocUrl } from "../railway/products.js";
 import { terms, type CorpusIndex, type RetrievalHit } from "../railway/retrieval.js";
 import type {
   Analysis,
@@ -9,7 +9,7 @@ import type {
   RailwayRef,
   RecommendedAction,
 } from "../types.js";
-import { firstSentence, truncate } from "../util/text.js";
+import { firstSentence, SPACED_EN_DASH, truncate } from "../util/text.js";
 import { evidenceFor, noActionOf, withNoAction } from "./noAction.js";
 import {
   describeProportion,
@@ -637,15 +637,70 @@ function kindForCause(cause: BlockCause): NoActionKind {
   }
 }
 
-/** What "Railway already does this" rests on, in the words of the check that said so. */
-function coveredReason(entry: BlockedAction, evidence: NoActionEvidence[]): string {
-  const pages = evidence.map((page) => page.title ?? page.url).join(" and ");
-  const gap = truncate(entry.action.gap ?? "", 120);
+/** Long enough for a product name, short enough to sit in a Discord title. */
+const MAX_FEATURE_CHARS = 48;
 
-  if (entry.cause === "wrong_page_ranked") {
-    return `Railway documents this already: searching the docs for "${gap}" ranks ${pages} above the page the analysis read it off.`;
+function trimFeature(name: string): string {
+  return truncate(name.trim().replace(/\s+/g, " "), MAX_FEATURE_CHARS);
+}
+
+/**
+ * Railway's name for the thing that already exists.
+ *
+ * The action's own `feature` is the one a person wrote, so it wins. A catalog
+ * match on a coverage page or the gap is next. A page title is last: it is a
+ * heading, not a product name, but it is still a name a reader can use.
+ */
+export function coveredFeature(
+  action: Pick<RecommendedAction, "feature" | "gap"> | undefined,
+  evidence: NoActionEvidence[] = [],
+): string | undefined {
+  const named = action?.feature?.trim();
+  if (named) return trimFeature(named);
+
+  for (const page of evidence) {
+    const fromUrl = page.url ? productForDocUrl(page.url) : undefined;
+    if (fromUrl) return fromUrl.label;
+    const fromTitle = page.title?.trim() ? findProductByName(page.title) : undefined;
+    if (fromTitle) return fromTitle.label;
   }
-  return `Railway documents this already: the docs cover "${gap}" on ${pages}, which the analysis never opened.`;
+
+  if (action?.gap) {
+    const fromGap = findProductByName(action.gap) ?? matchProducts(action.gap, 1)[0];
+    if (fromGap) return fromGap.label;
+  }
+
+  const titled = evidence.find((page) => page.title?.trim())?.title?.trim();
+  if (titled) return trimFeature(titled);
+
+  return undefined;
+}
+
+/** A short extra label when a page title is more specific than the feature. */
+function coveredGloss(feature: string, evidence: NoActionEvidence[]): string | undefined {
+  const title = evidence.find((page) => page.title?.trim())?.title?.trim();
+  if (!title) return undefined;
+  if (title.toLowerCase() === feature.toLowerCase()) return undefined;
+  if (title.length > MAX_FEATURE_CHARS) return undefined;
+  return title;
+}
+
+/**
+ * What "Railway already has X" rests on, in the words a reader sees.
+ *
+ * Both coverage causes land here: the ranked pages are the equivalent, and
+ * naming that equivalent is the whole job. Search rank and unread pages stay
+ * on the blocked action for the open question and the run log.
+ */
+function coveredReason(entry: BlockedAction, evidence: NoActionEvidence[]): string {
+  const feature = coveredFeature(entry.action, evidence);
+  if (!feature) {
+    return `Railway already has the equivalent of what this launch covers.`;
+  }
+  const gloss = coveredGloss(feature, evidence);
+  return gloss
+    ? `Railway already has ${feature} (${gloss})${SPACED_EN_DASH}the equivalent of what this launch covers.`
+    : `Railway already has ${feature}${SPACED_EN_DASH}the equivalent of what this launch covers.`;
 }
 
 function notAGapReason(blocked: BlockedAction[]): string {
@@ -677,7 +732,13 @@ export function noActionFrom(blocked: BlockedAction[], index: CorpusIndex): NoAc
 
   const first = covered[0];
   if (first && evidence.length > 0) {
-    return { kind: "already_covered", reason: coveredReason(first, evidence), evidence };
+    const feature = coveredFeature(first.action, evidence);
+    return {
+      kind: "already_covered",
+      reason: coveredReason(first, evidence),
+      evidence,
+      ...(feature ? { feature } : {}),
+    };
   }
 
   if (blocked.every((entry) => kindForCause(entry.cause) === "not_a_gap")) {
@@ -739,7 +800,15 @@ export function checkNoActionEvidence(
   }
 
   if (kept.length > 0) {
-    return { analysis: withNoAction(analysis, { ...verdict, evidence: kept }), notes };
+    const feature = verdict.feature ?? coveredFeature(undefined, kept);
+    return {
+      analysis: withNoAction(analysis, {
+        ...verdict,
+        evidence: kept,
+        ...(feature ? { feature } : {}),
+      }),
+      notes,
+    };
   }
 
   const failed = verdict.evidence[0]?.url;

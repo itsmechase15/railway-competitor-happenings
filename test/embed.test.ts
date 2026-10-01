@@ -200,6 +200,7 @@ describe("the Discord embed", () => {
       actions: [],
       noAction: {
         kind: "already_covered",
+        feature: "Scaling",
         reason: "Railway already offers memory-heavy plan shapes on every tier.",
         evidence: [{ url: "https://docs.railway.com/deployments/scaling", title: "Scaling" }],
       },
@@ -209,7 +210,7 @@ describe("the Discord embed", () => {
 
     expect(action?.value).toBe(
       [
-        `**${noActionTitle("already_covered")}**`,
+        `**${noActionTitle("already_covered", "Railway", "Scaling")}**`,
         "Railway already offers memory-heavy plan shapes on every tier.",
         "See: [Scaling](https://docs.railway.com/deployments/scaling)",
       ].join("\n"),

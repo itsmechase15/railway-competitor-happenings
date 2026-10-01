@@ -130,6 +130,12 @@ export interface NoAction {
    * them rather than published as a claim nobody can check.
    */
   evidence: NoActionEvidence[];
+  /**
+   * Railway's equivalent capability, when the verdict can name it. The title
+   * for `already_covered` uses this so a reader sees "already has Secrets"
+   * rather than only "already does this".
+   */
+  feature?: string;
 }
 
 export interface Analysis {

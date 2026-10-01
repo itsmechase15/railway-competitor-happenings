@@ -376,7 +376,7 @@ written:
 
 | Kind | Title | Written by |
 | --- | --- | --- |
-| `already_covered` | None – Railway already does this | The gate, off a coverage cause, or the analyst with docs pages it quoted |
+| `already_covered` | None – Railway already has {feature} (or "already does this" if unnamed) | The gate, off a coverage cause, or the analyst with docs pages it quoted |
 | `not_a_gap` | None – not a product gap | The gate on a pricing or docs-only block, and the relevance guards |
 | `unverified` | None – the gap could not be confirmed | Any other failed check, and a stored row that carries only a sentence |
 | `dropped_on_review` | None – dropped on review | The review pass, in the reviewer's own words |

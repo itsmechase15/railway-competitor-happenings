@@ -122,6 +122,7 @@ const noActionSchema = z
     kind: optionalText(60),
     reason: optionalText(600),
     no_action_reason: optionalText(600),
+    feature,
     evidence: z
       .preprocess(
         (value) =>
@@ -229,6 +230,7 @@ function readNoAction(parsed: z.infer<typeof analysisSchema>): NoAction {
   const stated = parsed.no_action_reason ?? parsed.noActionReason;
   const reason = structured?.reason ?? structured?.no_action_reason ?? stated;
   const kind = NO_ACTION_KINDS.find((known) => known === structured?.kind?.trim());
+  const named = structured?.feature?.trim();
 
   return {
     kind: kind ?? "unverified",
@@ -240,6 +242,7 @@ function readNoAction(parsed: z.infer<typeof analysisSchema>): NoAction {
       // it is the one string here that is not repunctuated.
       ...(entry.quote ? { quote: entry.quote.trim() } : {}),
     })),
+    ...(named ? { feature: clean(named) } : {}),
   };
 }
 
